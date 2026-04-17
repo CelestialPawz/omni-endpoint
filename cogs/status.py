@@ -115,8 +115,8 @@ class Status(commands.Cog):
                 ) as r:
                     data = await r.json(content_type=None)
 
-                # Blocking status (v6 uses /dns/blocking)
-                blocking_enabled = None
+                # Blocking status — v6 returns string "enabled"/"disabled"
+                status = "unknown"
                 try:
                     async with session.get(
                         f"{config.PIHOLE_URL}/dns/blocking",
@@ -124,20 +124,20 @@ class Status(commands.Cog):
                         timeout=aiohttp.ClientTimeout(total=5)
                     ) as r:
                         b = await r.json(content_type=None)
-                        blocking_enabled = b.get("blocking", None)
+                        status = b.get("blocking", "unknown")
                 except Exception:
                     pass
 
-                # Domains blocked count (v6 uses /info/database)
+                # Gravity domains count — v6 uses /info/gravity
                 domains_fmt = "N/A"
                 try:
                     async with session.get(
-                        f"{config.PIHOLE_URL}/info/database",
+                        f"{config.PIHOLE_URL}/info/gravity",
                         headers=headers,
                         timeout=aiohttp.ClientTimeout(total=5)
                     ) as r:
-                        db = await r.json(content_type=None)
-                        domains_raw = db.get("gravity", {}).get("domains", None)
+                        g = await r.json(content_type=None)
+                        domains_raw = g.get("domains_being_blocked") or g.get("gravity", {}).get("domains")
                         if domains_raw is not None:
                             domains_fmt = f"{int(domains_raw):,}"
                 except Exception:
@@ -152,13 +152,6 @@ class Status(commands.Cog):
 
                 queries = data.get("queries", {})
                 clients = data.get("clients", {})
-
-                if blocking_enabled is True:
-                    status = "enabled"
-                elif blocking_enabled is False:
-                    status = "disabled"
-                else:
-                    status = "unknown"
 
                 return {
                     "status":          status,
