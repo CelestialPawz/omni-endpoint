@@ -3,6 +3,16 @@ from discord.ext import commands
 from datetime import timedelta
 import config
 
+MOD_ROLES = ("Admin", "Moderator", "Owner")
+
+def has_mod_role():
+    async def predicate(ctx):
+        role_names = [r.name for r in ctx.author.roles]
+        if any(r in role_names for r in MOD_ROLES):
+            return True
+        raise commands.MissingAnyRole(list(MOD_ROLES))
+    return commands.check(predicate)
+
 class Moderation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -13,24 +23,27 @@ class Moderation(commands.Cog):
             await ch.send(embed=embed)
 
     @commands.command()
-    @commands.has_permissions(ban_members=True)
+    @has_mod_role()
     async def ban(self, ctx, member: discord.Member, *, reason="No reason provided"):
+        """Ban a member. Requires Admin, Moderator, or Owner role."""
         await member.ban(reason=reason)
         await ctx.send(f"\U0001f528 **{member}** has been banned. Reason: {reason}")
         embed = discord.Embed(title="Ban", description=f"{member.mention} banned by {ctx.author.mention}\n**Reason:** {reason}", color=discord.Color.red())
         await self._log(ctx.guild, embed)
 
     @commands.command()
-    @commands.has_permissions(kick_members=True)
+    @has_mod_role()
     async def kick(self, ctx, member: discord.Member, *, reason="No reason provided"):
+        """Kick a member. Requires Admin, Moderator, or Owner role."""
         await member.kick(reason=reason)
         await ctx.send(f"\U0001f462 **{member}** has been kicked. Reason: {reason}")
         embed = discord.Embed(title="Kick", description=f"{member.mention} kicked by {ctx.author.mention}\n**Reason:** {reason}", color=discord.Color.orange())
         await self._log(ctx.guild, embed)
 
     @commands.command()
-    @commands.has_permissions(moderate_members=True)
+    @has_mod_role()
     async def mute(self, ctx, member: discord.Member, minutes: int = 10, *, reason="No reason provided"):
+        """Timeout a member. Requires Admin, Moderator, or Owner role."""
         duration = timedelta(minutes=minutes)
         await member.timeout(duration, reason=reason)
         await ctx.send(f"\U0001f507 **{member}** muted for {minutes}m. Reason: {reason}")
@@ -38,16 +51,16 @@ class Moderation(commands.Cog):
         await self._log(ctx.guild, embed)
 
     @commands.command()
-    @commands.has_permissions(manage_messages=True)
+    @has_mod_role()
     async def purge(self, ctx, amount: int = 10):
-        """Delete the last N messages (default 10). Usage: !purge 25"""
+        """Delete the last N messages. Requires Admin, Moderator, or Owner role."""
         deleted = await ctx.channel.purge(limit=amount + 1)
         await ctx.send(f"\U0001f5d1\ufe0f Deleted {len(deleted)-1} messages.", delete_after=5)
 
     @commands.command()
-    @commands.has_permissions(ban_members=True)
+    @has_mod_role()
     async def unban(self, ctx, *, user_id: int):
-        """Unban a user by ID. Usage: !unban 123456789"""
+        """Unban a user by ID. Requires Admin, Moderator, or Owner role."""
         user = await self.bot.fetch_user(user_id)
         await ctx.guild.unban(user)
         await ctx.send(f"\u2705 Unbanned **{user}**.")
