@@ -7,8 +7,8 @@ import paramiko
 import ssl
 import config
 
-# Build docker format string at runtime to avoid template stripping
-_DOCKER_FMT = "" + ".Names: " + ".Status"
+# Build docker format string from parts: results in .Names: .Status
+_DOCKER_FMT = "{" + "{.Names}}: {" + "{.Status}}"
 
 class Status(commands.Cog):
     def __init__(self, bot):
@@ -90,7 +90,6 @@ class Status(commands.Cog):
             return {"error": str(e), "source": "ssh"}
 
     async def get_pihole_stats(self) -> dict:
-        """Pi-hole v6 API: password auth -> session SID -> stats."""
         ssl_ctx = ssl.create_default_context()
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
@@ -157,7 +156,6 @@ class Status(commands.Cog):
 
     @commands.command(name="serverstatus", aliases=["ss"])
     async def server_status(self, ctx):
-        """Full StarServer status report."""
         await ctx.typing()
         prom   = await self.get_prometheus_stats()
         pihole = await self.get_pihole_stats()
@@ -217,7 +215,6 @@ class Status(commands.Cog):
     @commands.command(name="sshstatus")
     @commands.has_permissions(administrator=True)
     async def ssh_status(self, ctx):
-        """Full SSH-based deep status dump (admin only)."""
         await ctx.typing()
         ssh = await self.get_ssh_stats()
         if "error" in ssh:
@@ -234,7 +231,6 @@ class Status(commands.Cog):
 
     @commands.command(name="pihole")
     async def pihole_cmd(self, ctx):
-        """Pi-hole stats."""
         data = await self.get_pihole_stats()
         if "error" in data:
             await ctx.send(f"\u274c Pi-hole unreachable: `{data['error']}`")
