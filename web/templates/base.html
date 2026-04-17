@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OMNI Endpoint{% if title %} —  title {% endif %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    {% if user and user.avatar %}
+    <img class="sidebar-avatar" src="https://cdn.discordapp.com/avatars/ user.id / user.avatar .png" alt="">
+    {% endif %}
+    <div class="logo-name">OMNI Endpoint</div>
+    <div class="logo-sub">Crystal Kitsune Studios</div>
+  </div>
+  <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">&#127968; Dashboard</a>
+  <a href="/modlogs" class="nav-link {% if request.path == '/modlogs' %}active{% endif %}">&#128196; Mod Logs</a>
+  <a href="/commands" class="nav-link {% if request.path == '/commands' %}active{% endif %}">&#127991; Commands</a>
+  <a href="/automod" class="nav-link {% if request.path == '/automod' %}active{% endif %}">&#128737; AutoMod</a>
+  <a href="/settings" class="nav-link {% if request.path == '/settings' %}active{% endif %}">&#9881; Settings</a>
+  <div class="sidebar-footer">
+    {% if user %}Logged in as <strong> user.username </strong><br>{% endif %}
+    <a href="/logout" style="color:var(--muted);font-size:.8rem;">Logout</a>
+  </div>
+</nav>
+<div class="main">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+    <div class="alert alert- cat "> msg </div>
+    {% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</div>
+</body>
+</html>
