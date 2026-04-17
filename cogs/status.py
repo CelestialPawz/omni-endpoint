@@ -7,6 +7,9 @@ import paramiko
 import ssl
 import config
 
+# Build docker format string at runtime to avoid template stripping
+_DOCKER_FMT = "" + ".Names: " + ".Status"
+
 class Status(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -72,8 +75,8 @@ class Status(commands.Cog):
                 "cpu":       "top -bn1 | grep Cpu | awk '{print $2}'",
                 "ram":       "free -h | awk '/Mem:/ {print $3, $2}'",
                 "disk":      "df -h / | awk 'NR==2 {print $3, $2, $5}'",
-                "docker_ps": "docker ps --format '.Names: .Status'",
-                "fail2ban":  "sudo fail2ban-client status sshd 2>/dev/null | grep -i 'banned' || echo N/A",
+                "docker_ps": f"docker ps --format '{_DOCKER_FMT}'",
+                "fail2ban":  "sudo fail2ban-client status sshd 2>/dev/null | grep -i banned || echo N/A",
             }
             for key, cmd in cmds.items():
                 _, stdout, _ = client.exec_command(cmd)
