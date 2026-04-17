@@ -2,14 +2,11 @@ import discord
 from discord.ext import commands
 from collections import defaultdict
 import time
+import re
+import database
 import config
 
-SPAM_THRESHOLD = 5
-SPAM_WINDOW    = 5
-MAX_CAPS_RATIO = 0.7
-MIN_CAPS_LEN   = 10
-
-BANNED_LINKS = ["grabify", "discord.gift", "bit.ly"]
+INVITE_PATTERN = re.compile(r"(discord\.gg|discord\.com/invite)/[a-zA-Z0-9]+")
 
 class AutoMod(commands.Cog):
     def __init__(self, bot):
@@ -26,6 +23,10 @@ class AutoMod(commands.Cog):
             )
             await ch.send(embed=embed)
 
+    async def _get(self, guild_id, key, default):
+        val = await database.get_setting(str(guild_id), key)
+        return val if val is not None else default
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot or not message.guild:
@@ -33,41 +34,64 @@ class AutoMod(commands.Cog):
         if message.author.guild_permissions.manage_messages:
             return
 
+        gid = message.guild.id
         content = message.content
         user_id = message.author.id
         now = time.time()
 
-        timestamps = self.message_log[user_id]
-        timestamps.append(now)
-        self.message_log[user_id] = [t for t in timestamps if now - t < SPAM_WINDOW]
-        if len(self.message_log[user_id]) >= SPAM_THRESHOLD:
-            await message.delete()
-            await message.channel.send(
-                f"{message.author.mention} Slow down \u2014 spam detected.",
-                delete_after=5
-            )
-            await self._log(message.guild, f"**Spam** from {message.author.mention} in {message.channel.mention}")
-            return
-
-        if len(content) >= MIN_CAPS_LEN:
-            caps_ratio = sum(1 for c in content if c.isupper()) / len(content)
-            if caps_ratio >= MAX_CAPS_RATIO:
+        # Spam check
+        if await self._get(gid, "automod_spam", 1):
+            threshold = int(await self._get(gid, "automod_spam_threshold", 5))
+            timestamps = self.message_log[user_id]
+            timestamps.append(now)
+            self.message_log[user_id] = [t for t in timestamps if now - t < 5]
+            if len(self.message_log[user_id]) >= threshold:
                 await message.delete()
                 await message.channel.send(
-                    f"{message.author.mention} Ease up on the caps.",
+                    f"{message.author.mention} Spam detected. Slow down.",
                     delete_after=5
                 )
-                await self._log(message.guild, f"**Caps** from {message.author.mention}: `{content[:80]}`")
+                await self._log(message.guild, f"**Spam** from {message.author.mention} in {message.channel.mention}")
+                await database.add_mod_log(str(gid), "automod_spam", str(self.bot.user.id), str(user_id))
                 return
 
-        for link in BANNED_LINKS:
+        # Caps check
+        if await self._get(gid, "automod_caps", 1):
+            caps_ratio = float(await self._get(gid, "automod_caps_ratio", 0.7))
+            if len(content) >= 10:
+                ratio = sum(1 for c in content if c.isupper()) / len(content)
+                if ratio >= caps_ratio:
+                    await message.delete()
+                    await message.channel.send(
+                        f"{message.author.mention} Ease up on the caps.",
+                        delete_after=5
+                    )
+                    await self._log(message.guild, f"**Caps** from {message.author.mention}: `{content[:80]}`")
+                    await database.add_mod_log(str(gid), "automod_caps", str(self.bot.user.id), str(user_id))
+                    return
+
+        # Invite filter
+        if await self._get(gid, "automod_invites", 1):
+            if INVITE_PATTERN.search(content):
+                await message.delete()
+                await message.channel.send(
+                    f"{message.author.mention} Discord invites are not allowed here.",
+                    delete_after=5
+                )
+                await self._log(message.guild, f"**Invite link** from {message.author.mention}: `{content[:80]}`")
+                await database.add_mod_log(str(gid), "automod_invite", str(self.bot.user.id), str(user_id))
+                return
+
+        # Banned links (static)
+        for link in ["grabify", "bit.ly"]:
             if link in content.lower():
                 await message.delete()
                 await message.channel.send(
-                    f"{message.author.mention} That link isn't allowed here.",
+                    f"{message.author.mention} That link is not permitted.",
                     delete_after=5
                 )
                 await self._log(message.guild, f"**Banned link** from {message.author.mention}: `{content[:80]}`")
+                await database.add_mod_log(str(gid), "automod_link", str(self.bot.user.id), str(user_id))
                 return
 
 async def setup(bot):
