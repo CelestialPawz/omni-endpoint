@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>OMNI Endpoint &mdash; Login</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="login-page">
+  <div class="login-card">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+      <div class="alert alert- cat "> msg </div>
+      {% endfor %}
+    {% endwith %}
+    <h1>&#129776; OMNI Endpoint</h1>
+    <p>Server management &amp; monitoring panel.<br>Sign in with Discord to continue.</p>
+    <a href=" oauth_url " class="btn btn-primary">&#129409; Login with Discord</a>
+  </div>
+</div>
+</body>
+</html>
