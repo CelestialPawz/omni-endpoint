@@ -88,7 +88,6 @@ class Status(commands.Cog):
 
     async def get_pihole_stats(self) -> dict:
         """Pi-hole v6 API: password auth -> session SID -> stats."""
-        # Skip SSL verification for self-signed cert on Tailscale IP
         ssl_ctx = ssl.create_default_context()
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
@@ -124,12 +123,18 @@ class Status(commands.Cog):
                 blocking = data.get("blocking", {})
                 clients  = data.get("clients", {})
 
+                domains_raw = blocking.get("domains_being_blocked", "N/A")
+                try:
+                    domains_fmt = f"{int(domains_raw):,}"
+                except (ValueError, TypeError):
+                    domains_fmt = str(domains_raw)
+
                 return {
                     "status":          blocking.get("status", "unknown"),
                     "queries_today":   queries.get("total", "N/A"),
                     "blocked_today":   queries.get("blocked", "N/A"),
                     "block_pct":       queries.get("percent_blocked", 0),
-                    "domains_blocked": blocking.get("domains_being_blocked", "N/A"),
+                    "domains_blocked": domains_fmt,
                     "clients":         clients.get("active", "N/A"),
                 }
         except Exception as e:
@@ -183,7 +188,7 @@ class Status(commands.Cog):
                     f"**Status:** {ph_icon} {pihole['status'].capitalize()}\n"
                     f"**Queries today:** {pihole['queries_today']}\n"
                     f"**Blocked today:** {pihole['blocked_today']} ({round(pihole['block_pct'], 1)}%)\n"
-                    f"**Blocklist:** {pihole['domains_blocked']:,} domains\n"
+                    f"**Blocklist:** {pihole['domains_blocked']} domains\n"
                     f"**Clients:** {pihole['clients']}"
                 ),
                 inline=False
@@ -224,7 +229,7 @@ class Status(commands.Cog):
         embed.add_field(name="Status",            value=f"{ph_icon} {data['status'].capitalize()}", inline=True)
         embed.add_field(name="Queries Today",     value=str(data["queries_today"]), inline=True)
         embed.add_field(name="Blocked Today",     value=f"{data['blocked_today']} ({round(data['block_pct'],1)}%)", inline=True)
-        embed.add_field(name="Blocklist Domains", value=f"{data['domains_blocked']:,}", inline=True)
+        embed.add_field(name="Blocklist Domains", value=str(data["domains_blocked"]), inline=True)
         embed.add_field(name="Active Clients",    value=str(data["clients"]), inline=True)
         await ctx.send(embed=embed)
 
