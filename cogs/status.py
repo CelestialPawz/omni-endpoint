@@ -7,7 +7,7 @@ import paramiko
 import ssl
 import config
 
-# Build docker format string from parts: results in .Names: .Status
+# Build docker format string from parts
 _DOCKER_FMT = "{" + "{.Names}}: {" + "{.Status}}"
 
 class Status(commands.Cog):
@@ -76,7 +76,7 @@ class Status(commands.Cog):
                 "ram":       "free -h | awk '/Mem:/ {print $3, $2}'",
                 "disk":      "df -h / | awk 'NR==2 {print $3, $2, $5}'",
                 "docker_ps": f"docker ps --format '{_DOCKER_FMT}'",
-                "fail2ban":  "sudo fail2ban-client status sshd 2>/dev/null | grep -i banned || echo N/A",
+                "fail2ban":  "sudo fail2ban-client status sshd 2>/dev/null | grep -E 'Currently (failed|banned)' || echo 'N/A'",
             }
             for key, cmd in cmds.items():
                 _, stdout, _ = client.exec_command(cmd)
@@ -226,7 +226,7 @@ class Status(commands.Cog):
         embed.add_field(name="RAM",    value=ssh.get("ram", "N/A"), inline=True)
         embed.add_field(name="Disk",   value=ssh.get("disk", "N/A"), inline=False)
         embed.add_field(name="\U0001f433 Docker", value=f"```{ssh.get('docker_ps', 'N/A')[:800]}```", inline=False)
-        embed.add_field(name="Fail2Ban (sshd)", value=ssh.get("fail2ban", "N/A"), inline=False)
+        embed.add_field(name="\U0001f6e1\ufe0f Fail2Ban (sshd)", value=ssh.get("fail2ban", "N/A"), inline=False)
         await ctx.send(embed=embed)
 
     @commands.command(name="pihole")
