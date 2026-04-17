@@ -94,6 +94,7 @@ class Status(commands.Cog):
         connector = aiohttp.TCPConnector(ssl=ssl_ctx)
         try:
             async with aiohttp.ClientSession(connector=connector) as session:
+                # Authenticate
                 async with session.post(
                     f"{config.PIHOLE_URL}/auth",
                     json={"password": config.PIHOLE_API_KEY},
@@ -106,6 +107,7 @@ class Status(commands.Cog):
 
                 headers = {"X-FTL-SID": sid}
 
+                # Stats summary
                 async with session.get(
                     f"{config.PIHOLE_URL}/stats/summary",
                     headers=headers,
@@ -113,24 +115,53 @@ class Status(commands.Cog):
                 ) as r:
                     data = await r.json(content_type=None)
 
+                # Blocking status (v6 uses /dns/blocking)
+                blocking_enabled = None
+                try:
+                    async with session.get(
+                        f"{config.PIHOLE_URL}/dns/blocking",
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    ) as r:
+                        b = await r.json(content_type=None)
+                        blocking_enabled = b.get("blocking", None)
+                except Exception:
+                    pass
+
+                # Domains blocked count (v6 uses /info/database)
+                domains_fmt = "N/A"
+                try:
+                    async with session.get(
+                        f"{config.PIHOLE_URL}/info/database",
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    ) as r:
+                        db = await r.json(content_type=None)
+                        domains_raw = db.get("gravity", {}).get("domains", None)
+                        if domains_raw is not None:
+                            domains_fmt = f"{int(domains_raw):,}"
+                except Exception:
+                    pass
+
+                # Clean up session
                 await session.delete(
                     f"{config.PIHOLE_URL}/auth",
                     headers=headers,
                     timeout=aiohttp.ClientTimeout(total=3)
                 )
 
-                queries  = data.get("queries", {})
-                blocking = data.get("blocking", {})
-                clients  = data.get("clients", {})
+                queries = data.get("queries", {})
+                clients = data.get("clients", {})
 
-                domains_raw = blocking.get("domains_being_blocked", "N/A")
-                try:
-                    domains_fmt = f"{int(domains_raw):,}"
-                except (ValueError, TypeError):
-                    domains_fmt = str(domains_raw)
+                if blocking_enabled is True:
+                    status = "enabled"
+                elif blocking_enabled is False:
+                    status = "disabled"
+                else:
+                    status = "unknown"
 
                 return {
-                    "status":          blocking.get("status", "unknown"),
+                    "status":          status,
                     "queries_today":   queries.get("total", "N/A"),
                     "blocked_today":   queries.get("blocked", "N/A"),
                     "block_pct":       queries.get("percent_blocked", 0),
