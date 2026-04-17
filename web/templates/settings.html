@@ -9,22 +9,22 @@
       <div class="form-group">
         <label class="form-label">Log Channel ID</label>
         <input class="form-control" name="log_channel_id" placeholder="e.g. 1234567890123456789"
-          value="{% if settings and settings['log_channel_id'] %}168{% endif %}">
+          value="<% (settings['log_channel_id'] if settings and settings['log_channel_id'] else '') %>">
       </div>
       <div class="form-group">
         <label class="form-label">Welcome Channel ID</label>
         <input class="form-control" name="welcome_channel_id" placeholder="e.g. 1234567890123456789"
-          value="{% if settings and settings['welcome_channel_id'] %}169{% endif %}">
+          value="<% (settings['welcome_channel_id'] if settings and settings['welcome_channel_id'] else '') %>">
       </div>
       <div class="form-group">
         <label class="form-label">Starboard Channel ID</label>
         <input class="form-control" name="starboard_channel_id" placeholder="e.g. 1234567890123456789"
-          value="{% if settings and settings['starboard_channel_id'] %}170{% endif %}">
+          value="<% (settings['starboard_channel_id'] if settings and settings['starboard_channel_id'] else '') %>">
       </div>
       <div class="form-group">
         <label class="form-label">Starboard Threshold (stars)</label>
         <input class="form-control" type="number" name="starboard_threshold" min="1" max="50"
-          value="{% if settings and settings['starboard_threshold'] %}171{% else %}3{% endif %}">
+          value="<% (settings['starboard_threshold'] if settings and settings['starboard_threshold'] else 3) %>">
       </div>
     </div>
   </div>
@@ -34,13 +34,13 @@
       <label class="form-label">Welcome Message</label>
       <input class="form-control" name="welcome_message"
         placeholder="Welcome {user} to {server}!"
-        value="{% if settings and settings['welcome_message'] %}172{% endif %}">
+        value="<% (settings['welcome_message'] if settings and settings['welcome_message'] else '') %>">
       <small style="color:var(--muted);font-size:.8rem">Use <code>{user}</code> and <code>{server}</code> as placeholders.</small>
     </div>
     <div class="form-group">
       <label class="form-label">Auto-Role ID (assigned on join)</label>
       <input class="form-control" name="auto_role_id" placeholder="e.g. 1234567890123456789"
-        value="{% if settings and settings['auto_role_id'] %}173{% endif %}">
+        value="<% (settings['auto_role_id'] if settings and settings['auto_role_id'] else '') %>">
     </div>
   </div>
   <button type="submit" class="btn btn-primary">&#10003; Save Settings</button>
