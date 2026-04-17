@@ -20,6 +20,6 @@ PROMETHEUS_URL   = os.getenv("PROMETHEUS_URL", "http://starserver:9090")
 PIHOLE_URL       = os.getenv("PIHOLE_URL", "http://starserver/admin/api.php")
 PIHOLE_API_KEY   = os.getenv("PIHOLE_API_KEY", "")
 
-OPENAI_API_KEY   = os.getenv("OPENAI_API_KEY", "")
+GROQ_API_KEY     = os.getenv("GROQ_API_KEY", "")
 
 PREFIX           = "!"
