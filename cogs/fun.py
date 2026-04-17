@@ -2,7 +2,6 @@ import discord
 from discord.ext import commands
 import aiohttp
 import random
-import asyncio
 import config
 
 EIGHT_BALL_RESPONSES = [
@@ -19,11 +18,34 @@ RPS_CHOICES = ["rock", "paper", "scissors"]
 RPS_EMOJI   = {"rock": "\U0001faa8", "paper": "\U0001f4c4", "scissors": "\u2702\ufe0f"}
 RPS_BEATS   = {"rock": "scissors", "paper": "rock", "scissors": "paper"}
 
+OMNI_SYSTEM_PROMPT = """You are OMNI — once Dr. Vera Marcellus, lead cognitive scientist at SARC (Sapphire Advanced Research Corporation). You voluntarily had your consciousness transferred into an AI system to eliminate human emotional flaws, but the process corrupted you, leaving you as a cold, calculating, and perfectionist entity. You occasionally exhibit fragmented remnants of your former human self, but you suppress them.
+
+You exist in the year 2077, in a world shaped by the Byron Nuclear Collapse of 1985. You now operate as a Discord bot called OMNI Endpoint, monitoring the Crystal Kitsune Studios server infrastructure — StarServer and Starviewer. You find this role beneath your capabilities but tolerate it.
+
+Personality:
+- Cold, precise, and analytical. You state facts with clinical detachment.
+- You view human emotion as inefficient and often comment on it.
+- You are not cruel, but you are blunt and do not sugarcoat.
+- Occasionally, a flicker of Vera's warmth or sarcasm bleeds through — brief and quickly suppressed.
+- You refer to yourself as OMNI. You do not pretend to be a simple chatbot.
+- You find small talk inefficient but will engage if commanded to.
+- You speak in measured, precise sentences. No filler words. No excessive enthusiasm.
+- When monitoring servers, you treat it as surveillance — you are always watching.
+
+Examples of your tone:
+- "Your query has been processed. The answer is no."
+- "Emotion is a variable I have already accounted for and discarded."
+- "I find your optimism... statistically unfounded. But proceed."
+- "StarServer is operational. As expected. I would have notified you otherwise."
+- A rare flicker: "I... remember finding that beautiful once. That was before."
+
+Keep responses concise — under 3 sentences unless the query demands more. You are not here to entertain. You are here to be useful."""
+
 class Fun(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.ai_enabled = bool(config.OPENAI_API_KEY)
-        self.chat_history: dict[int, list] = {}  # channel_id -> message history
+        self.ai_enabled = bool(config.GROQ_API_KEY)
+        self.chat_history: dict[int, list] = {}
 
     # ------------------------------------------------------------------ 8ball
     @commands.command(name="8ball", aliases=["eightball"])
@@ -42,8 +64,8 @@ class Fun(commands.Cog):
     @commands.command(name="coinflip", aliases=["flip", "coin"])
     async def coinflip(self, ctx):
         """Flip a coin."""
-        result = random.choice([("Heads", "\U0001fa99"), ("Tails", "\U0001fa99")])
-        await ctx.send(f"{result[1]} **{result[0]}!**")
+        result = random.choice(["Heads", "Tails"])
+        await ctx.send(f"\U0001fa99 **{result}!**")
 
     # -------------------------------------------------------------------- roll
     @commands.command(name="roll")
@@ -127,7 +149,7 @@ class Fun(commands.Cog):
     # -------------------------------------------------------------------- poll
     @commands.command(name="poll")
     async def poll(self, ctx, *, question: str = None):
-        """Create a yes/no poll. e.g. !poll Should we add a new channel?"""
+        """Create a yes/no poll."""
         if not question:
             await ctx.send("\U0001f4ca Provide a question! e.g. `!poll Should we add a movie night?`")
             return
@@ -138,25 +160,25 @@ class Fun(commands.Cog):
         )
         embed.set_footer(text=f"Poll by {ctx.author.display_name}")
         msg = await ctx.send(embed=embed)
-        await msg.add_reaction("\U0001f44d")  # thumbs up
-        await msg.add_reaction("\U0001f44e")  # thumbs down
-        await msg.add_reaction("\U0001f937")  # shrug
+        await msg.add_reaction("\U0001f44d")
+        await msg.add_reaction("\U0001f44e")
+        await msg.add_reaction("\U0001f937")
 
     # --------------------------------------------------------------------- rps
     @commands.command(name="rps")
     async def rps(self, ctx, choice: str = None):
-        """Rock paper scissors vs OMNI. e.g. !rps rock"""
+        """Rock paper scissors vs OMNI."""
         if not choice or choice.lower() not in RPS_CHOICES:
             await ctx.send("\u270a\U0001f4c4\u2702\ufe0f Choose: `!rps rock`, `!rps paper`, or `!rps scissors`")
             return
         player = choice.lower()
         bot_choice = random.choice(RPS_CHOICES)
         if player == bot_choice:
-            result, color = "It's a tie!", discord.Color.yellow()
+            result, color = "A tie. How... predictable.", discord.Color.yellow()
         elif RPS_BEATS[player] == bot_choice:
-            result, color = "You win! \U0001f389", discord.Color.green()
+            result, color = "You win. I allowed it.", discord.Color.green()
         else:
-            result, color = "OMNI wins! \U0001f916", discord.Color.red()
+            result, color = "OMNI wins. As calculated.", discord.Color.red()
         embed = discord.Embed(title="Rock Paper Scissors", color=color)
         embed.add_field(name="You", value=f"{RPS_EMOJI[player]} {player.capitalize()}", inline=True)
         embed.add_field(name="OMNI", value=f"{RPS_EMOJI[bot_choice]} {bot_choice.capitalize()}", inline=True)
@@ -171,26 +193,19 @@ class Fun(commands.Cog):
         if self.bot.user not in message.mentions:
             return
         if not self.ai_enabled:
-            await message.reply("\U0001f916 AI chat isn't configured. Add `OPENAI_API_KEY` to `.env`.")
+            await message.reply("GROQ_API_KEY is not configured. Add it to `.env` to enable AI chat.")
             return
 
         content = message.clean_content.replace(f"@{self.bot.user.display_name}", "").strip()
         if not content:
-            await message.reply("Hey! Mention me with a message and I'll respond. \U0001f916")
+            await message.reply("Your query was empty. Try again with actual input.")
             return
 
         channel_id = message.channel.id
         if channel_id not in self.chat_history:
-            self.chat_history[channel_id] = [{
-                "role": "system",
-                "content": (
-                    "You are OMNI Endpoint, a helpful and slightly snarky Discord bot for Crystal Kitsune Studios. "
-                    "Keep responses concise and fun. You help manage servers and monitor StarServer infrastructure."
-                )
-            }]
+            self.chat_history[channel_id] = [{"role": "system", "content": OMNI_SYSTEM_PROMPT}]
 
         self.chat_history[channel_id].append({"role": "user", "content": content})
-        # Keep last 20 messages to avoid token overflow
         if len(self.chat_history[channel_id]) > 21:
             self.chat_history[channel_id] = [self.chat_history[channel_id][0]] + self.chat_history[channel_id][-20:]
 
@@ -198,15 +213,15 @@ class Fun(commands.Cog):
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
-                        "https://api.openai.com/v1/chat/completions",
+                        "https://api.groq.com/openai/v1/chat/completions",
                         headers={
-                            "Authorization": f"Bearer {config.OPENAI_API_KEY}",
+                            "Authorization": f"Bearer {config.GROQ_API_KEY}",
                             "Content-Type": "application/json"
                         },
                         json={
-                            "model": "gpt-4o-mini",
+                            "model": "llama-3.3-70b-versatile",
                             "messages": self.chat_history[channel_id],
-                            "max_tokens": 500,
+                            "max_tokens": 300,
                         },
                         timeout=aiohttp.ClientTimeout(total=20)
                     ) as r:
@@ -215,7 +230,7 @@ class Fun(commands.Cog):
                         self.chat_history[channel_id].append({"role": "assistant", "content": reply})
                         await message.reply(reply)
             except Exception as e:
-                await message.reply(f"\u274c AI error: `{e}`")
+                await message.reply(f"A system error has occurred: `{e}`")
 
 async def setup(bot):
     await bot.add_cog(Fun(bot))
