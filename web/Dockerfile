@@ -2,11 +2,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY ../requirements.txt .
-RUN pip install --no-cache-dir flask requests python-dotenv aiosqlite
+# Build context is repo root (set in docker-compose.yml)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY web/ .
+COPY web/ ./web/
 COPY database.py .
+
+WORKDIR /app/web
 
 EXPOSE 5000
 
