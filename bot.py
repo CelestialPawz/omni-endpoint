@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import config
 import asyncio
+import traceback
 
 intents = discord.Intents.default()
 intents.members = True
@@ -27,6 +28,12 @@ async def on_ready():
         print(f"[OMNI Endpoint] Synced {len(synced)} slash commands")
     except Exception as e:
         print(f"[OMNI Endpoint] Sync error: {e}")
+
+@bot.event
+async def on_command_error(ctx, error):
+    print(f"[ERROR] Command '{ctx.command}' raised: {error}")
+    traceback.print_exception(type(error), error, error.__traceback__)
+    await ctx.send(f"\u274c Error: `{error}`")
 
 async def main():
     async with bot:
