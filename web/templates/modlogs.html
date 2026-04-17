@@ -9,12 +9,12 @@
     <tbody>
     {% for log in logs %}
     <tr>
-      <td style="color:var(--muted);font-size:.8rem"> log.id </td>
-      <td><span class="badge badge-purple"> log.action </span></td>
-      <td><code> log.moderator_id </code></td>
-      <td><code> log.target_id </code></td>
-      <td> log.reason or '&#8212;' </td>
-      <td style="color:var(--muted);font-size:.8rem"> log.timestamp </td>
+      <td style="color:var(--muted);font-size:.8rem"><% log['id'] %></td>
+      <td><span class="badge badge-purple"><% log['action'] %></span></td>
+      <td><code><% log['moderator_id'] %></code></td>
+      <td><code><% log['target_id'] %></code></td>
+      <td><% log['reason'] or '&#8212;' %></td>
+      <td style="color:var(--muted);font-size:.8rem"><% log['timestamp'] %></td>
     </tr>
     {% endfor %}
     </tbody>
