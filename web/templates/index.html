@@ -3,9 +3,9 @@
 {% block content %}
 <h1 class="page-title">&#127968; Dashboard</h1>
 <div class="grid-4">
-  <div class="card"><div class="card-title">Total Warnings</div><div class="card-value">warn_count</div></div>
-  <div class="card"><div class="card-title">Tags / Commands</div><div class="card-value">tag_count</div></div>
-  <div class="card"><div class="card-title">Mod Actions</div><div class="card-value">log_count</div></div>
+  <div class="card"><div class="card-title">Total Warnings</div><div class="card-value"><% warn_count %></div></div>
+  <div class="card"><div class="card-title">Tags / Commands</div><div class="card-value"><% tag_count %></div></div>
+  <div class="card"><div class="card-title">Mod Actions</div><div class="card-value"><% log_count %></div></div>
   <div class="card"><div class="card-title">Bot Status</div><div class="card-value"><span class="badge badge-green">Online</span></div></div>
 </div>
 <div class="card">
@@ -19,11 +19,11 @@
     <tbody>
     {% for log in recent_logs %}
     <tr>
-      <td><span class="badge badge-purple">log.action</span></td>
-      <td><code>log.moderator_id</code></td>
-      <td><code>log.target_id</code></td>
-      <td>log.reason or '—'</td>
-      <td style="color:var(--muted);font-size:.8rem">log.timestamp</td>
+      <td><span class="badge badge-purple"><% log['action'] %></span></td>
+      <td><code><% log['moderator_id'] %></code></td>
+      <td><code><% log['target_id'] %></code></td>
+      <td><% log['reason'] or '&#8212;' %></td>
+      <td style="color:var(--muted);font-size:.8rem"><% log['timestamp'] %></td>
     </tr>
     {% endfor %}
     </tbody>
