@@ -8,6 +8,6 @@ services:
     env_file:
       - .env
     volumes:
-      - ~/.ssh/id_rsa:/root/.ssh/id_rsa:ro
+      - /home/celestialpawz/.ssh/id_ed25519:/root/.ssh/id_ed25519:ro
     extra_hosts:
       - "starserver:host-gateway"
