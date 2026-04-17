@@ -107,7 +107,7 @@ class Status(commands.Cog):
 
                 headers = {"X-FTL-SID": sid}
 
-                # Stats summary
+                # Stats summary (includes gravity.domains_being_blocked)
                 async with session.get(
                     f"{config.PIHOLE_URL}/stats/summary",
                     headers=headers,
@@ -115,7 +115,7 @@ class Status(commands.Cog):
                 ) as r:
                     data = await r.json(content_type=None)
 
-                # Blocking status — v6 returns string "enabled"/"disabled"
+                # Blocking status
                 status = "unknown"
                 try:
                     async with session.get(
@@ -128,21 +128,6 @@ class Status(commands.Cog):
                 except Exception:
                     pass
 
-                # Gravity domains count — v6 uses /info/gravity
-                domains_fmt = "N/A"
-                try:
-                    async with session.get(
-                        f"{config.PIHOLE_URL}/info/gravity",
-                        headers=headers,
-                        timeout=aiohttp.ClientTimeout(total=5)
-                    ) as r:
-                        g = await r.json(content_type=None)
-                        domains_raw = g.get("domains_being_blocked") or g.get("gravity", {}).get("domains")
-                        if domains_raw is not None:
-                            domains_fmt = f"{int(domains_raw):,}"
-                except Exception:
-                    pass
-
                 # Clean up session
                 await session.delete(
                     f"{config.PIHOLE_URL}/auth",
@@ -152,6 +137,13 @@ class Status(commands.Cog):
 
                 queries = data.get("queries", {})
                 clients = data.get("clients", {})
+                gravity = data.get("gravity", {})
+
+                domains_raw = gravity.get("domains_being_blocked")
+                try:
+                    domains_fmt = f"{int(domains_raw):,}" if domains_raw is not None else "N/A"
+                except (ValueError, TypeError):
+                    domains_fmt = str(domains_raw)
 
                 return {
                     "status":          status,
@@ -207,7 +199,7 @@ class Status(commands.Cog):
         if "error" not in pihole:
             ph_icon = "\U0001f7e2" if pihole["status"] == "enabled" else "\U0001f534"
             embed.add_field(
-                name="\U0001f310 Pi-hole",
+                name="\U0001f310 Pi-hole (Starviewer)",
                 value=(
                     f"**Status:** {ph_icon} {pihole['status'].capitalize()}\n"
                     f"**Queries today:** {pihole['queries_today']}\n"
@@ -249,7 +241,7 @@ class Status(commands.Cog):
             await ctx.send(f"\u274c Pi-hole unreachable: `{data['error']}`")
             return
         ph_icon = "\U0001f7e2" if data["status"] == "enabled" else "\U0001f534"
-        embed = discord.Embed(title="\U0001f310 Pi-hole Status", color=discord.Color.dark_blue())
+        embed = discord.Embed(title="\U0001f310 Pi-hole Status (Starviewer)", color=discord.Color.dark_blue())
         embed.add_field(name="Status",            value=f"{ph_icon} {data['status'].capitalize()}", inline=True)
         embed.add_field(name="Queries Today",     value=str(data["queries_today"]), inline=True)
         embed.add_field(name="Blocked Today",     value=f"{data['blocked_today']} ({round(data['block_pct'],1)}%)", inline=True)
