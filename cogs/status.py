@@ -4,6 +4,7 @@ from discord.ext import tasks
 import aiohttp
 import asyncio
 import paramiko
+import ssl
 import config
 
 class Status(commands.Cog):
@@ -66,7 +67,6 @@ class Status(commands.Cog):
                 timeout=8,
             )
             results = {}
-            # Note: awk commands use single quotes only — no embedded double quotes
             cmds = {
                 "uptime":    "uptime -p",
                 "cpu":       "top -bn1 | grep Cpu | awk '{print $2}'",
@@ -88,8 +88,13 @@ class Status(commands.Cog):
 
     async def get_pihole_stats(self) -> dict:
         """Pi-hole v6 API: password auth -> session SID -> stats."""
+        # Skip SSL verification for self-signed cert on Tailscale IP
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+        connector = aiohttp.TCPConnector(ssl=ssl_ctx)
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(connector=connector) as session:
                 async with session.post(
                     f"{config.PIHOLE_URL}/auth",
                     json={"password": config.PIHOLE_API_KEY},
