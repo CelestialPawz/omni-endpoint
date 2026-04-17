@@ -66,13 +66,14 @@ class Status(commands.Cog):
                 timeout=8,
             )
             results = {}
+            # Note: awk commands use single quotes only — no embedded double quotes
             cmds = {
                 "uptime":    "uptime -p",
-                "cpu":       "top -bn1 | grep 'Cpu(s)' | awk '{print $2}'",
-                "ram":       "free -h | awk '/Mem:/ {print $3, "/", $2}'",
-                "disk":      "df -h / | awk 'NR==2 {print $3, "/", $2, " (", $5, ")" }'",
+                "cpu":       "top -bn1 | grep Cpu | awk '{print $2}'",
+                "ram":       "free -h | awk '/Mem:/ {print $3, $2}'",
+                "disk":      "df -h / | awk 'NR==2 {print $3, $2, $5}'",
                 "docker_ps": "docker ps --format '.Names: .Status'",
-                "fail2ban":  "sudo fail2ban-client status sshd 2>/dev/null | grep 'Currently banned' || echo 'N/A'",
+                "fail2ban":  "sudo fail2ban-client status sshd 2>/dev/null | grep Currently || echo N/A",
             }
             for key, cmd in cmds.items():
                 _, stdout, _ = client.exec_command(cmd)
