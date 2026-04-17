@@ -1,0 +1,10 @@
+tunnel: YOUR_TUNNEL_ID_HERE
+credentials-file: /root/.cloudflared/YOUR_TUNNEL_ID_HERE.json
+
+ingress:
+  # Web panel
+  - hostname: omni-endpoint.crystal-kitsune-studios.com
+    service: http://localhost:5000
+
+  # Catch-all (required)
+  - service: http_status:404
