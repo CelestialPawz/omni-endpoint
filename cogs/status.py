@@ -69,8 +69,8 @@ class Status(commands.Cog):
             cmds = {
                 "uptime":    "uptime -p",
                 "cpu":       "top -bn1 | grep 'Cpu(s)' | awk '{print $2}'",
-                "ram":       "free -h | awk '/Mem:/ {print $3\" / \"$2}'",
-                "disk":      "df -h / | awk 'NR==2 {print $3\" / \"$2\" (\"$5\")"}'",
+                "ram":       "free -h | awk '/Mem:/ {print $3, "/", $2}'",
+                "disk":      "df -h / | awk 'NR==2 {print $3, "/", $2, " (", $5, ")" }'",
                 "docker_ps": "docker ps --format '.Names: .Status'",
                 "fail2ban":  "sudo fail2ban-client status sshd 2>/dev/null | grep 'Currently banned' || echo 'N/A'",
             }
@@ -89,7 +89,6 @@ class Status(commands.Cog):
         """Pi-hole v6 API: password auth -> session SID -> stats."""
         try:
             async with aiohttp.ClientSession() as session:
-                # Step 1: authenticate
                 async with session.post(
                     f"{config.PIHOLE_URL}/auth",
                     json={"password": config.PIHOLE_API_KEY},
@@ -98,11 +97,10 @@ class Status(commands.Cog):
                     auth = await r.json(content_type=None)
                     sid = auth.get("session", {}).get("sid")
                     if not sid:
-                        return {"error": "Pi-hole auth failed — check PIHOLE_API_KEY in .env"}
+                        return {"error": "Pi-hole auth failed - check PIHOLE_API_KEY in .env"}
 
                 headers = {"X-FTL-SID": sid}
 
-                # Step 2: summary stats
                 async with session.get(
                     f"{config.PIHOLE_URL}/stats/summary",
                     headers=headers,
@@ -110,7 +108,6 @@ class Status(commands.Cog):
                 ) as r:
                     data = await r.json(content_type=None)
 
-                # Step 3: delete session (clean up)
                 await session.delete(
                     f"{config.PIHOLE_URL}/auth",
                     headers=headers,
