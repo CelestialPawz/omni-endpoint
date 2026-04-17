@@ -3,6 +3,7 @@ from discord.ext import commands
 import config
 import asyncio
 import traceback
+import database
 
 intents = discord.Intents.default()
 intents.members = True
@@ -15,7 +16,11 @@ COGS = [
     "cogs.welcome",
     "cogs.roles",
     "cogs.moderation",
+    "cogs.warnings",
     "cogs.logs",
+    "cogs.tags",
+    "cogs.starboard",
+    "cogs.reminders",
     "cogs.custom_commands",
     "cogs.status",
     "cogs.fun",
@@ -33,15 +38,29 @@ async def on_ready():
 
 @bot.event
 async def on_command_error(ctx, error):
-    print(f"[ERROR] Command '{ctx.command}' raised: {error}")
-    traceback.print_exception(type(error), error, error.__traceback__)
-    await ctx.send(f"\u274c Error: `{error}`")
+    if isinstance(error, commands.MissingAnyRole):
+        await ctx.send("\u274c You don't have the required role to use this command.")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"\u274c Missing argument: `{error.param.name}`. See `!help`.")
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send("\u274c Member not found.")
+    elif isinstance(error, commands.CommandNotFound):
+        pass
+    else:
+        print(f"[ERROR] Command '{ctx.command}' raised: {error}")
+        traceback.print_exception(type(error), error, error.__traceback__)
+        await ctx.send(f"\u274c Error: `{error}`")
 
 async def main():
+    await database.init_db()
+    print("[OMNI Endpoint] Database initialised.")
     async with bot:
         for cog in COGS:
-            await bot.load_extension(cog)
-            print(f"[OMNI Endpoint] Loaded {cog}")
+            try:
+                await bot.load_extension(cog)
+                print(f"[OMNI Endpoint] Loaded {cog}")
+            except Exception as e:
+                print(f"[OMNI Endpoint] Failed to load {cog}: {e}")
         await bot.start(config.TOKEN)
 
 if __name__ == "__main__":
