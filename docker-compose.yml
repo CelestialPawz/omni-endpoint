@@ -9,9 +9,5 @@ services:
       - .env
     volumes:
       - ~/.ssh/id_rsa:/root/.ssh/id_rsa:ro
-    networks:
-      - monitoring
-
-networks:
-  monitoring:
-    external: true
+    extra_hosts:
+      - "starserver:host-gateway"
