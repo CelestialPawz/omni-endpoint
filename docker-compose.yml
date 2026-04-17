@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  omni-endpoint:
+    build: .
+    container_name: omni-endpoint
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ~/.ssh/id_rsa:/root/.ssh/id_rsa:ro
+    networks:
+      - monitoring
+
+networks:
+  monitoring:
+    external: true
