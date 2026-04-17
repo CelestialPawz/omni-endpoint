@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% set title = 'Mod Logs' %}
+{% block content %}
+<h1 class="page-title">&#128196; Mod Logs</h1>
+<div class="card">
+  {% if logs %}
+  <table>
+    <thead><tr><th>#</th><th>Action</th><th>Moderator</th><th>Target</th><th>Reason</th><th>Timestamp</th></tr></thead>
+    <tbody>
+    {% for log in logs %}
+    <tr>
+      <td style="color:var(--muted);font-size:.8rem"> log.id </td>
+      <td><span class="badge badge-purple"> log.action </span></td>
+      <td><code> log.moderator_id </code></td>
+      <td><code> log.target_id </code></td>
+      <td> log.reason or '&#8212;' </td>
+      <td style="color:var(--muted);font-size:.8rem"> log.timestamp </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted);font-size:.9rem">No mod actions logged yet.</p>
+  {% endif %}
+</div>
+{% endblock %}
