@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% set title = 'Dashboard' %}
+{% block content %}
+<h1 class="page-title">&#127968; Dashboard</h1>
+<div class="grid-4">
+  <div class="card"><div class="card-title">Total Warnings</div><div class="card-value">warn_count</div></div>
+  <div class="card"><div class="card-title">Tags / Commands</div><div class="card-value">tag_count</div></div>
+  <div class="card"><div class="card-title">Mod Actions</div><div class="card-value">log_count</div></div>
+  <div class="card"><div class="card-title">Bot Status</div><div class="card-value"><span class="badge badge-green">Online</span></div></div>
+</div>
+<div class="card">
+  <div class="section-header">
+    <span style="font-weight:600">&#128196; Recent Mod Actions</span>
+    <a href="/modlogs" class="btn btn-ghost" style="font-size:.8rem">View all &rarr;</a>
+  </div>
+  {% if recent_logs %}
+  <table>
+    <thead><tr><th>Action</th><th>Moderator</th><th>Target</th><th>Reason</th><th>Time</th></tr></thead>
+    <tbody>
+    {% for log in recent_logs %}
+    <tr>
+      <td><span class="badge badge-purple">log.action</span></td>
+      <td><code>log.moderator_id</code></td>
+      <td><code>log.target_id</code></td>
+      <td>log.reason or '—'</td>
+      <td style="color:var(--muted);font-size:.8rem">log.timestamp</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted);font-size:.9rem;margin-top:.5rem">No mod actions logged yet.</p>
+  {% endif %}
+</div>
+{% endblock %}
