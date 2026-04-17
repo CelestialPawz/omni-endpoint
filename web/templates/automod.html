@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% set title = 'AutoMod' %}
+{% block content %}
+<h1 class="page-title">&#128737; AutoMod Settings</h1>
+<form method="POST" action="/automod/save">
+  <div class="card">
+    <div style="font-weight:600;margin-bottom:1rem">Filters</div>
+    <div class="form-check">
+      <input type="checkbox" name="automod_spam" id="automod_spam"
+        {% if settings and settings['automod_spam'] %}checked{% endif %}>
+      <label for="automod_spam">Anti-Spam</label>
+    </div>
+    <div class="form-check">
+      <input type="checkbox" name="automod_caps" id="automod_caps"
+        {% if settings and settings['automod_caps'] %}checked{% endif %}>
+      <label for="automod_caps">Excessive Caps</label>
+    </div>
+    <div class="form-check">
+      <input type="checkbox" name="automod_invites" id="automod_invites"
+        {% if settings and settings['automod_invites'] %}checked{% endif %}>
+      <label for="automod_invites">Discord Invite Links</label>
+    </div>
+  </div>
+  <div class="card">
+    <div style="font-weight:600;margin-bottom:1rem">Thresholds</div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">Spam message threshold (per 5s)</label>
+        <input class="form-control" type="number" name="automod_spam_threshold" min="2" max="20"
+          value="{% if settings and settings['automod_spam_threshold'] %}settings['automod_spam_threshold']{% else %}5{% endif %}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Caps ratio (0.0 &ndash; 1.0)</label>
+        <input class="form-control" type="number" name="automod_caps_ratio" min="0.1" max="1.0" step="0.05"
+          value="{% if settings and settings['automod_caps_ratio'] %}settings['automod_caps_ratio']{% else %}0.7{% endif %}">
+      </div>
+    </div>
+  </div>
+  <button type="submit" class="btn btn-primary">&#10003; Save AutoMod Settings</button>
+</form>
+{% endblock %}
