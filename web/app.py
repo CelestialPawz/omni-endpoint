@@ -12,6 +12,10 @@ load_dotenv(os.path.join(ROOT, '.env'))
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'change-me')
 
+# Use <% %> for variable interpolation to avoid conflicts with   in other tooling
+app.jinja_env.variable_start_string = '<%'
+app.jinja_env.variable_end_string   = '%>'
+
 DB_PATH       = os.getenv('DB_PATH', '/data/omni.db')
 CLIENT_ID     = os.getenv('DISCORD_CLIENT_ID', '1494509191749042237')
 CLIENT_SECRET = os.getenv('DISCORD_CLIENT_SECRET', '')
@@ -39,7 +43,7 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
-# ── Auth ──────────────────────────────────────────────────────────────────
+# --- Auth ---
 
 @app.route('/login')
 def login():
@@ -73,7 +77,7 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# ── Dashboard ─────────────────────────────────────────────────────────────
+# --- Dashboard ---
 
 @app.route('/')
 @login_required
@@ -88,7 +92,7 @@ def index():
         warn_count=warn_count, tag_count=tag_count,
         log_count=log_count, recent_logs=recent_logs)
 
-# ── Mod Logs ──────────────────────────────────────────────────────────────
+# --- Mod Logs ---
 
 @app.route('/modlogs')
 @login_required
@@ -98,7 +102,7 @@ def modlogs():
     conn.close()
     return render_template('modlogs.html', user=session['user'], logs=logs)
 
-# ── Tags / Commands ───────────────────────────────────────────────────────
+# --- Tags / Commands ---
 
 @app.route('/commands')
 @login_required
@@ -138,7 +142,7 @@ def delete_command(tag_id):
     flash('Tag deleted.', 'success')
     return redirect(url_for('commands'))
 
-# ── AutoMod ───────────────────────────────────────────────────────────────
+# --- AutoMod ---
 
 @app.route('/automod')
 @login_required
@@ -171,7 +175,7 @@ def save_automod():
     flash('AutoMod settings saved.', 'success')
     return redirect(url_for('automod'))
 
-# ── Settings ──────────────────────────────────────────────────────────────
+# --- Settings ---
 
 @app.route('/settings')
 @login_required
