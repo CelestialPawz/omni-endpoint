@@ -86,19 +86,49 @@ class Status(commands.Cog):
             return {"error": str(e), "source": "ssh"}
 
     async def get_pihole_stats(self) -> dict:
-        params = {"summaryRaw": "", "auth": config.PIHOLE_API_KEY}
+        """Pi-hole v6 API: password auth -> session SID -> stats."""
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(config.PIHOLE_URL, params=params, timeout=aiohttp.ClientTimeout(total=5)) as r:
+                # Step 1: authenticate
+                async with session.post(
+                    f"{config.PIHOLE_URL}/auth",
+                    json={"password": config.PIHOLE_API_KEY},
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as r:
+                    auth = await r.json(content_type=None)
+                    sid = auth.get("session", {}).get("sid")
+                    if not sid:
+                        return {"error": "Pi-hole auth failed — check PIHOLE_API_KEY in .env"}
+
+                headers = {"X-FTL-SID": sid}
+
+                # Step 2: summary stats
+                async with session.get(
+                    f"{config.PIHOLE_URL}/stats/summary",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=5)
+                ) as r:
                     data = await r.json(content_type=None)
-                    return {
-                        "status":          data.get("status", "unknown"),
-                        "queries_today":   data.get("dns_queries_today", "N/A"),
-                        "blocked_today":   data.get("ads_blocked_today", "N/A"),
-                        "block_pct":       data.get("ads_percentage_today", 0),
-                        "domains_blocked": data.get("domains_being_blocked", "N/A"),
-                        "clients":         data.get("unique_clients", "N/A"),
-                    }
+
+                # Step 3: delete session (clean up)
+                await session.delete(
+                    f"{config.PIHOLE_URL}/auth",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=3)
+                )
+
+                queries  = data.get("queries", {})
+                blocking = data.get("blocking", {})
+                clients  = data.get("clients", {})
+
+                return {
+                    "status":          blocking.get("status", "unknown"),
+                    "queries_today":   queries.get("total", "N/A"),
+                    "blocked_today":   queries.get("blocked", "N/A"),
+                    "block_pct":       queries.get("percent_blocked", 0),
+                    "domains_blocked": blocking.get("domains_being_blocked", "N/A"),
+                    "clients":         clients.get("active", "N/A"),
+                }
         except Exception as e:
             return {"error": str(e)}
 
@@ -188,11 +218,11 @@ class Status(commands.Cog):
             return
         ph_icon = "\U0001f7e2" if data["status"] == "enabled" else "\U0001f534"
         embed = discord.Embed(title="\U0001f310 Pi-hole Status", color=discord.Color.dark_blue())
-        embed.add_field(name="Status",           value=f"{ph_icon} {data['status'].capitalize()}", inline=True)
-        embed.add_field(name="Queries Today",    value=str(data["queries_today"]), inline=True)
-        embed.add_field(name="Blocked Today",    value=f"{data['blocked_today']} ({round(data['block_pct'],1)}%)", inline=True)
-        embed.add_field(name="Blocklist Domains",value=f"{data['domains_blocked']:,}", inline=True)
-        embed.add_field(name="Active Clients",   value=str(data["clients"]), inline=True)
+        embed.add_field(name="Status",            value=f"{ph_icon} {data['status'].capitalize()}", inline=True)
+        embed.add_field(name="Queries Today",     value=str(data["queries_today"]), inline=True)
+        embed.add_field(name="Blocked Today",     value=f"{data['blocked_today']} ({round(data['block_pct'],1)}%)", inline=True)
+        embed.add_field(name="Blocklist Domains", value=f"{data['domains_blocked']:,}", inline=True)
+        embed.add_field(name="Active Clients",    value=str(data["clients"]), inline=True)
         await ctx.send(embed=embed)
 
     @tasks.loop(minutes=5)
