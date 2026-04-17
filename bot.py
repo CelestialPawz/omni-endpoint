@@ -19,6 +19,7 @@ COGS = [
     "cogs.custom_commands",
     "cogs.status",
     "cogs.fun",
+    "cogs.help",
 ]
 
 @bot.event
