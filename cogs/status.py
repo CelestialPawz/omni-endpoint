@@ -73,7 +73,7 @@ class Status(commands.Cog):
                 "ram":       "free -h | awk '/Mem:/ {print $3, $2}'",
                 "disk":      "df -h / | awk 'NR==2 {print $3, $2, $5}'",
                 "docker_ps": "docker ps --format '.Names: .Status'",
-                "fail2ban":  "sudo fail2ban-client status sshd 2>/dev/null | grep Currently || echo N/A",
+                "fail2ban":  "sudo fail2ban-client status sshd 2>/dev/null | grep -i 'banned' || echo N/A",
             }
             for key, cmd in cmds.items():
                 _, stdout, _ = client.exec_command(cmd)
@@ -94,7 +94,6 @@ class Status(commands.Cog):
         connector = aiohttp.TCPConnector(ssl=ssl_ctx)
         try:
             async with aiohttp.ClientSession(connector=connector) as session:
-                # Authenticate
                 async with session.post(
                     f"{config.PIHOLE_URL}/auth",
                     json={"password": config.PIHOLE_API_KEY},
@@ -107,7 +106,6 @@ class Status(commands.Cog):
 
                 headers = {"X-FTL-SID": sid}
 
-                # Stats summary (includes gravity.domains_being_blocked)
                 async with session.get(
                     f"{config.PIHOLE_URL}/stats/summary",
                     headers=headers,
@@ -115,7 +113,6 @@ class Status(commands.Cog):
                 ) as r:
                     data = await r.json(content_type=None)
 
-                # Blocking status
                 status = "unknown"
                 try:
                     async with session.get(
@@ -128,7 +125,6 @@ class Status(commands.Cog):
                 except Exception:
                     pass
 
-                # Clean up session
                 await session.delete(
                     f"{config.PIHOLE_URL}/auth",
                     headers=headers,
