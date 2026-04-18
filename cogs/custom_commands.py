@@ -26,29 +26,31 @@ class CustomCommands(commands.Cog):
             await db.commit()
 
     @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
-        if message.author.bot:
+    async def on_command_error(self, ctx, error):
+        """Intercept CommandNotFound and check if it's a custom tag."""
+        if not isinstance(error, commands.CommandNotFound):
             return
-        if not message.content.startswith('!'):
-            return
 
-        cmd = message.content[1:].split()[0].lower()
-        guild_id = str(message.guild.id) if message.guild else GUILD_ID
+        cmd = ctx.invoked_with.lower()
+        guild_id = str(ctx.guild.id) if ctx.guild else GUILD_ID
 
-        async with aiosqlite.connect(DB_PATH) as db:
-            async with db.execute(
-                'SELECT content FROM tags WHERE guild_id = ? AND name = ?',
-                (guild_id, cmd)
-            ) as cursor:
-                row = await cursor.fetchone()
-
-            if row:
-                await db.execute(
-                    'UPDATE tags SET uses = uses + 1 WHERE guild_id = ? AND name = ?',
+        try:
+            async with aiosqlite.connect(DB_PATH) as db:
+                async with db.execute(
+                    'SELECT content FROM tags WHERE guild_id = ? AND name = ?',
                     (guild_id, cmd)
-                )
-                await db.commit()
-                await message.channel.send(row[0])
+                ) as cursor:
+                    row = await cursor.fetchone()
+
+                if row:
+                    await db.execute(
+                        'UPDATE tags SET uses = uses + 1 WHERE guild_id = ? AND name = ?',
+                        (guild_id, cmd)
+                    )
+                    await db.commit()
+                    await ctx.send(row[0])
+        except Exception as e:
+            print(f'[CustomCommands] Error looking up tag "{cmd}": {e}')
 
 async def setup(bot):
     await bot.add_cog(CustomCommands(bot))
