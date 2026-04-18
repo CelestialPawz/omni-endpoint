@@ -4,6 +4,8 @@ import config
 import asyncio
 import traceback
 import database
+import aiosqlite
+import os
 
 intents = discord.Intents.default()
 intents.members = True
@@ -38,14 +40,34 @@ async def on_ready():
 
 @bot.event
 async def on_command_error(ctx, error):
-    if isinstance(error, commands.MissingAnyRole):
+    if isinstance(error, commands.CommandNotFound):
+        # Check if it matches a custom tag in the DB
+        cmd = ctx.invoked_with.lower()
+        guild_id = str(ctx.guild.id) if ctx.guild else os.getenv('GUILD_ID', '')
+        db_path = os.getenv('DB_PATH', 'omni.db')
+        try:
+            async with aiosqlite.connect(db_path) as db:
+                async with db.execute(
+                    'SELECT content FROM tags WHERE guild_id = ? AND name = ?',
+                    (guild_id, cmd)
+                ) as cursor:
+                    row = await cursor.fetchone()
+                if row:
+                    await db.execute(
+                        'UPDATE tags SET uses = uses + 1 WHERE guild_id = ? AND name = ?',
+                        (guild_id, cmd)
+                    )
+                    await db.commit()
+                    await ctx.send(row[0])
+        except Exception as e:
+            print(f'[OMNI Endpoint] Tag lookup error for "{cmd}": {e}')
+        return
+    elif isinstance(error, commands.MissingAnyRole):
         await ctx.send("\u274c You don't have the required role to use this command.")
     elif isinstance(error, commands.MissingRequiredArgument):
         await ctx.send(f"\u274c Missing argument: `{error.param.name}`. See `!help`.")
     elif isinstance(error, commands.MemberNotFound):
         await ctx.send("\u274c Member not found.")
-    elif isinstance(error, commands.CommandNotFound):
-        pass
     else:
         print(f"[ERROR] Command '{ctx.command}' raised: {error}")
         traceback.print_exception(type(error), error, error.__traceback__)
