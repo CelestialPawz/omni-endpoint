@@ -65,10 +65,10 @@
     <table>
       <thead><tr><th>#</th><th>User ID</th><th>Level</th><th>XP</th><th>Progress</th></tr></thead>
       <tbody>
-      {% for i, row in top_users | enumerate %}
+      {% for row in top_users %}
       {% set lvl, xp_in, xp_needed, pct = xp_progress(row['xp']) %}
       <tr>
-        <td style="color:var(--muted)"><% i + 1 %></td>
+        <td style="color:var(--muted)"><% loop.index %></td>
         <td><code><% row['user_id'] %></code></td>
         <td><span class="badge badge-purple">Lvl <% lvl %></span></td>
         <td><% '{:,}'.format(row['xp']) %></td>

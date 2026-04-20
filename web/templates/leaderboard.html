@@ -17,11 +17,14 @@
       </tr>
     </thead>
     <tbody>
-    {% for i, row in rows | enumerate %}
+    {% for row in rows %}
     {% set lvl, xp_in, xp_needed, pct = xp_progress(row['xp']) %}
     <tr>
       <td style="color:var(--muted);font-weight:600">
-        {% if i == 0 %}&#127947;{% elif i == 1 %}&#129352;{% elif i == 2 %}&#129353;{% else %}<% i + 1 %>{% endif %}
+        {% if loop.index == 1 %}&#127947;
+        {% elif loop.index == 2 %}&#129352;
+        {% elif loop.index == 3 %}&#129353;
+        {% else %}<% loop.index %>{% endif %}
       </td>
       <td><code><% row['user_id'] %></code></td>
       <td><span class="badge badge-purple">Level <% lvl %></span></td>
