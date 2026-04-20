@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% set title = 'Mod Notes' %}
+{% block content %}
+<h1 class="page-title">&#128203; Mod Notes</h1>
+
+<div class="card" style="margin-bottom:1.25rem">
+  <form method="GET" action="/modnotes" style="display:flex;gap:.75rem;align-items:flex-end">
+    <div class="form-group" style="margin:0;flex:1">
+      <label class="form-label">Search by User ID</label>
+      <input class="form-control" name="q" value="<% search %>" placeholder="e.g. 123456789012345678">
+    </div>
+    <button type="submit" class="btn btn-primary">&#128269; Search</button>
+    {% if search %}
+    <a href="/modnotes" class="btn btn-ghost">Clear</a>
+    {% endif %}
+  </form>
+</div>
+
+<div class="card">
+  {% if search %}
+  <p style="color:var(--muted);font-size:.85rem;margin-bottom:.75rem">
+    Showing results for <code><% search %></code> &mdash; <% notes|length %> note(s) found.
+  </p>
+  {% endif %}
+  {% if notes %}
+  <table>
+    <thead>
+      <tr>
+        <th style="width:3rem">#</th>
+        <th>User ID</th>
+        <th>Note</th>
+        <th>Added by</th>
+        <th>Timestamp</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for note in notes %}
+    <tr>
+      <td style="color:var(--muted);font-size:.8rem"><% note['id'] %></td>
+      <td><code><% note['user_id'] %></code></td>
+      <td style="max-width:360px"><% note['note'] %></td>
+      <td><code><% note['moderator_id'] %></code></td>
+      <td style="color:var(--muted);font-size:.8rem"><% note['timestamp'] %></td>
+      <td>
+        <form method="POST" action="/modnotes/delete/<% note['id'] %>" style="margin:0"
+              onsubmit="return confirm('Delete this note?')">
+          <button class="btn btn-danger" style="padding:.2rem .55rem;font-size:.75rem" title="Delete">&#128465;</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted);font-size:.9rem">
+    {% if search %}No notes found for that user ID.{% else %}No mod notes yet.{% endif %}
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

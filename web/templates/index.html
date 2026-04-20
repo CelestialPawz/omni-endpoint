@@ -3,33 +3,88 @@
 {% block content %}
 <h1 class="page-title">&#127968; Dashboard</h1>
 <div class="grid-4">
-  <div class="card"><div class="card-title">Total Warnings</div><div class="card-value"><% warn_count %></div></div>
-  <div class="card"><div class="card-title">Tags / Commands</div><div class="card-value"><% tag_count %></div></div>
-  <div class="card"><div class="card-title">Mod Actions</div><div class="card-value"><% log_count %></div></div>
-  <div class="card"><div class="card-title">Bot Status</div><div class="card-value"><span class="badge badge-green">Online</span></div></div>
-</div>
-<div class="card">
-  <div class="section-header">
-    <span style="font-weight:600">&#128196; Recent Mod Actions</span>
-    <a href="/modlogs" class="btn btn-ghost" style="font-size:.8rem">View all &rarr;</a>
+  <div class="card">
+    <div class="card-title">Total Warnings</div>
+    <div class="card-value"><% warn_count %></div>
   </div>
-  {% if recent_logs %}
-  <table>
-    <thead><tr><th>Action</th><th>Moderator</th><th>Target</th><th>Reason</th><th>Time</th></tr></thead>
-    <tbody>
-    {% for log in recent_logs %}
-    <tr>
-      <td><span class="badge badge-purple"><% log['action'] %></span></td>
-      <td><code><% log['moderator_id'] %></code></td>
-      <td><code><% log['target_id'] %></code></td>
-      <td><% log['reason'] or '&#8212;' %></td>
-      <td style="color:var(--muted);font-size:.8rem"><% log['timestamp'] %></td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p style="color:var(--muted);font-size:.9rem;margin-top:.5rem">No mod actions logged yet.</p>
-  {% endif %}
+  <div class="card">
+    <div class="card-title">Tags / Commands</div>
+    <div class="card-value"><% tag_count %></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Mod Actions</div>
+    <div class="card-value"><% log_count %></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Ranked Members</div>
+    <div class="card-value"><% ranked_count %></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Mod Notes</div>
+    <div class="card-value"><% note_count %></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Bot Status</div>
+    <div class="card-value"><span class="badge badge-green">Online</span></div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-top:0">
+
+  <div class="card">
+    <div class="section-header">
+      <span style="font-weight:600">&#128196; Recent Mod Actions</span>
+      <a href="/modlogs" class="btn btn-ghost" style="font-size:.8rem">View all &rarr;</a>
+    </div>
+    {% if recent_logs %}
+    <table>
+      <thead><tr><th>Action</th><th>Moderator</th><th>Target</th><th>Reason</th><th>Time</th></tr></thead>
+      <tbody>
+      {% for log in recent_logs %}
+      <tr>
+        <td><span class="badge badge-purple"><% log['action'] %></span></td>
+        <td><code><% log['moderator_id'] %></code></td>
+        <td><code><% log['target_id'] or '&#8212;' %></code></td>
+        <td><% log['reason'] or '&#8212;' %></td>
+        <td style="color:var(--muted);font-size:.8rem"><% log['timestamp'] %></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--muted);font-size:.9rem;margin-top:.5rem">No mod actions logged yet.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="section-header">
+      <span style="font-weight:600">&#11088; Top 5 by XP</span>
+      <a href="/leaderboard" class="btn btn-ghost" style="font-size:.8rem">Full board &rarr;</a>
+    </div>
+    {% if top_users %}
+    <table>
+      <thead><tr><th>#</th><th>User ID</th><th>Level</th><th>XP</th><th>Progress</th></tr></thead>
+      <tbody>
+      {% for i, row in top_users | enumerate %}
+      {% set lvl, xp_in, xp_needed, pct = xp_progress(row['xp']) %}
+      <tr>
+        <td style="color:var(--muted)"><% i + 1 %></td>
+        <td><code><% row['user_id'] %></code></td>
+        <td><span class="badge badge-purple">Lvl <% lvl %></span></td>
+        <td><% '{:,}'.format(row['xp']) %></td>
+        <td style="min-width:80px">
+          <div style="background:var(--surface2);border-radius:4px;height:6px;width:100%">
+            <div style="background:var(--accent);border-radius:4px;height:6px;width:<% pct %>%"></div>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--muted);font-size:.9rem;margin-top:.5rem">No XP data yet.</p>
+    {% endif %}
+  </div>
+
 </div>
 {% endblock %}

@@ -1,4 +1,4 @@
-import os, sys, sqlite3, requests
+import os, sys, sqlite3, math, requests
 from flask import Flask, render_template, redirect, request, session, url_for, flash
 from functools import wraps
 from dotenv import load_dotenv
@@ -12,7 +12,6 @@ load_dotenv(os.path.join(ROOT, '.env'))
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'change-me')
 
-# Use <% %> for variable interpolation to avoid conflicts with   in other tooling
 app.jinja_env.variable_start_string = '<%'
 app.jinja_env.variable_end_string   = '%>'
 
@@ -29,6 +28,30 @@ OAUTH_URL = (
     '&response_type=code&scope=identify+guilds'
 )
 
+# ── Level helpers ────────────────────────────────────────────────────────────
+
+def level_from_xp(xp):
+    if not xp or xp <= 0:
+        return 0
+    return int((-1 + math.sqrt(1 + 4 * xp / 50)) / 2)
+
+def xp_for_level(level):
+    return 100 * level * (level + 1) // 2
+
+def xp_progress(xp):
+    level     = level_from_xp(xp)
+    floor     = xp_for_level(level)
+    nxt       = xp_for_level(level + 1)
+    xp_in     = xp - floor
+    xp_needed = nxt - floor
+    pct       = round((xp_in / xp_needed) * 100) if xp_needed else 100
+    return level, xp_in, xp_needed, pct
+
+app.jinja_env.globals['level_from_xp'] = level_from_xp
+app.jinja_env.globals['xp_progress']   = xp_progress
+
+# ── DB ───────────────────────────────────────────────────────────────────────
+
 def get_db():
     db_module.init_db_sync()
     conn = sqlite3.connect(DB_PATH)
@@ -43,7 +66,7 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
-# --- Auth ---
+# ── Auth ─────────────────────────────────────────────────────────────────────
 
 @app.route('/login')
 def login():
@@ -68,7 +91,7 @@ def callback():
     if 'id' not in user:
         flash('Could not fetch user info.', 'danger')
         return redirect(url_for('login'))
-    session['user'] = user
+    session['user']  = user
     session['token'] = token
     return redirect(url_for('index'))
 
@@ -77,22 +100,28 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# --- Dashboard ---
+# ── Dashboard ─────────────────────────────────────────────────────────────────
 
 @app.route('/')
 @login_required
 def index():
     conn = get_db()
-    warn_count  = conn.execute('SELECT COUNT(*) FROM warnings').fetchone()[0]
-    tag_count   = conn.execute('SELECT COUNT(*) FROM tags').fetchone()[0]
-    log_count   = conn.execute('SELECT COUNT(*) FROM mod_logs').fetchone()[0]
-    recent_logs = conn.execute('SELECT * FROM mod_logs ORDER BY timestamp DESC LIMIT 5').fetchall()
+    warn_count    = conn.execute('SELECT COUNT(*) FROM warnings').fetchone()[0]
+    tag_count     = conn.execute('SELECT COUNT(*) FROM tags').fetchone()[0]
+    log_count     = conn.execute('SELECT COUNT(*) FROM mod_logs').fetchone()[0]
+    ranked_count  = conn.execute('SELECT COUNT(*) FROM levels').fetchone()[0]
+    note_count    = conn.execute('SELECT COUNT(*) FROM mod_notes').fetchone()[0]
+    recent_logs   = conn.execute('SELECT * FROM mod_logs ORDER BY timestamp DESC LIMIT 5').fetchall()
+    top_users     = conn.execute('SELECT user_id, xp, level FROM levels ORDER BY xp DESC LIMIT 5').fetchall()
     conn.close()
-    return render_template('index.html', user=session['user'],
+    return render_template('index.html',
+        user=session['user'],
         warn_count=warn_count, tag_count=tag_count,
-        log_count=log_count, recent_logs=recent_logs)
+        log_count=log_count, ranked_count=ranked_count,
+        note_count=note_count,
+        recent_logs=recent_logs, top_users=top_users)
 
-# --- Mod Logs ---
+# ── Mod Logs ──────────────────────────────────────────────────────────────────
 
 @app.route('/modlogs')
 @login_required
@@ -102,7 +131,59 @@ def modlogs():
     conn.close()
     return render_template('modlogs.html', user=session['user'], logs=logs)
 
-# --- Tags / Commands ---
+# ── Mod Notes ─────────────────────────────────────────────────────────────────
+
+@app.route('/modnotes')
+@login_required
+def modnotes():
+    search = request.args.get('q', '').strip()
+    conn   = get_db()
+    if search:
+        notes = conn.execute(
+            'SELECT * FROM mod_notes WHERE user_id LIKE ? ORDER BY timestamp DESC LIMIT 200',
+            (f'%{search}%',)
+        ).fetchall()
+    else:
+        notes = conn.execute(
+            'SELECT * FROM mod_notes ORDER BY timestamp DESC LIMIT 200'
+        ).fetchall()
+    conn.close()
+    return render_template('modnotes.html', user=session['user'], notes=notes, search=search)
+
+@app.route('/modnotes/delete/<int:note_id>', methods=['POST'])
+@login_required
+def delete_note(note_id):
+    conn = get_db()
+    conn.execute('DELETE FROM mod_notes WHERE id=?', (note_id,))
+    conn.commit()
+    conn.close()
+    flash('Note deleted.', 'success')
+    return redirect(url_for('modnotes'))
+
+# ── Leaderboard ───────────────────────────────────────────────────────────────
+
+@app.route('/leaderboard')
+@login_required
+def leaderboard():
+    conn  = get_db()
+    rows  = conn.execute(
+        'SELECT user_id, xp, level FROM levels ORDER BY xp DESC LIMIT 100'
+    ).fetchall()
+    total = conn.execute('SELECT COUNT(*) FROM levels').fetchone()[0]
+    conn.close()
+    return render_template('leaderboard.html', user=session['user'], rows=rows, total=total)
+
+@app.route('/leaderboard/reset/<user_id>', methods=['POST'])
+@login_required
+def reset_user_xp(user_id):
+    conn = get_db()
+    conn.execute('DELETE FROM levels WHERE user_id=?', (user_id,))
+    conn.commit()
+    conn.close()
+    flash(f'XP reset for user {user_id}.', 'success')
+    return redirect(url_for('leaderboard'))
+
+# ── Tags / Commands ───────────────────────────────────────────────────────────
 
 @app.route('/commands')
 @login_required
@@ -132,6 +213,20 @@ def add_command():
         conn.close()
     return redirect(url_for('commands'))
 
+@app.route('/commands/edit/<int:tag_id>', methods=['POST'])
+@login_required
+def edit_command(tag_id):
+    content = request.form.get('content', '').strip()
+    if not content:
+        flash('Content cannot be empty.', 'danger')
+        return redirect(url_for('commands'))
+    conn = get_db()
+    conn.execute('UPDATE tags SET content=? WHERE id=?', (content, tag_id))
+    conn.commit()
+    conn.close()
+    flash('Tag updated.', 'success')
+    return redirect(url_for('commands'))
+
 @app.route('/commands/delete/<int:tag_id>', methods=['POST'])
 @login_required
 def delete_command(tag_id):
@@ -142,7 +237,7 @@ def delete_command(tag_id):
     flash('Tag deleted.', 'success')
     return redirect(url_for('commands'))
 
-# --- AutoMod ---
+# ── AutoMod ───────────────────────────────────────────────────────────────────
 
 @app.route('/automod')
 @login_required
@@ -155,11 +250,11 @@ def automod():
 @app.route('/automod/save', methods=['POST'])
 @login_required
 def save_automod():
-    spam  = 1 if request.form.get('automod_spam') else 0
-    caps  = 1 if request.form.get('automod_caps') else 0
-    inv   = 1 if request.form.get('automod_invites') else 0
-    thresh= int(request.form.get('automod_spam_threshold', 5))
-    ratio = float(request.form.get('automod_caps_ratio', 0.7))
+    spam   = 1 if request.form.get('automod_spam') else 0
+    caps   = 1 if request.form.get('automod_caps') else 0
+    inv    = 1 if request.form.get('automod_invites') else 0
+    thresh = int(request.form.get('automod_spam_threshold', 5))
+    ratio  = float(request.form.get('automod_caps_ratio', 0.7))
     conn = get_db()
     conn.execute("""
         INSERT INTO guild_settings(guild_id,automod_spam,automod_caps,automod_invites,
@@ -175,7 +270,7 @@ def save_automod():
     flash('AutoMod settings saved.', 'success')
     return redirect(url_for('automod'))
 
-# --- Settings ---
+# ── Settings ──────────────────────────────────────────────────────────────────
 
 @app.route('/settings')
 @login_required

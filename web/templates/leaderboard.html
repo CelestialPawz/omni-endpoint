@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% set title = 'Leaderboard' %}
+{% block content %}
+<h1 class="page-title">&#11088; XP Leaderboard</h1>
+<p style="color:var(--muted);margin-bottom:1.25rem">Showing top <% rows|length %> of <% total %> ranked members.</p>
+<div class="card">
+  {% if rows %}
+  <table>
+    <thead>
+      <tr>
+        <th style="width:3rem">#</th>
+        <th>User ID</th>
+        <th>Level</th>
+        <th>Total XP</th>
+        <th>Progress to next</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for i, row in rows | enumerate %}
+    {% set lvl, xp_in, xp_needed, pct = xp_progress(row['xp']) %}
+    <tr>
+      <td style="color:var(--muted);font-weight:600">
+        {% if i == 0 %}&#127947;{% elif i == 1 %}&#129352;{% elif i == 2 %}&#129353;{% else %}<% i + 1 %>{% endif %}
+      </td>
+      <td><code><% row['user_id'] %></code></td>
+      <td><span class="badge badge-purple">Level <% lvl %></span></td>
+      <td><strong><% '{:,}'.format(row['xp']) %></strong></td>
+      <td style="min-width:140px">
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <div style="flex:1;background:var(--surface2);border-radius:4px;height:8px">
+            <div style="background:var(--accent);border-radius:4px;height:8px;width:<% pct %>%"></div>
+          </div>
+          <span style="font-size:.75rem;color:var(--muted);white-space:nowrap"><% xp_in %>/<% xp_needed %></span>
+        </div>
+      </td>
+      <td>
+        <form method="POST" action="/leaderboard/reset/<% row['user_id'] %>" style="margin:0"
+              onsubmit="return confirm('Reset XP for this user?')">
+          <button class="btn btn-danger" style="padding:.2rem .55rem;font-size:.75rem" title="Reset XP">&#128465;</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted)">No XP data yet. Members earn XP by chatting in Discord.</p>
+  {% endif %}
+</div>
+{% endblock %}
