@@ -3,30 +3,12 @@
 {% block content %}
 <h1 class="page-title">&#127968; Dashboard</h1>
 <div class="grid-4">
-  <div class="card">
-    <div class="card-title">Total Warnings</div>
-    <div class="card-value"><% warn_count %></div>
-  </div>
-  <div class="card">
-    <div class="card-title">Tags / Commands</div>
-    <div class="card-value"><% tag_count %></div>
-  </div>
-  <div class="card">
-    <div class="card-title">Mod Actions</div>
-    <div class="card-value"><% log_count %></div>
-  </div>
-  <div class="card">
-    <div class="card-title">Ranked Members</div>
-    <div class="card-value"><% ranked_count %></div>
-  </div>
-  <div class="card">
-    <div class="card-title">Mod Notes</div>
-    <div class="card-value"><% note_count %></div>
-  </div>
-  <div class="card">
-    <div class="card-title">Bot Status</div>
-    <div class="card-value"><span class="badge badge-green">Online</span></div>
-  </div>
+  <div class="card"><div class="card-title">Total Warnings</div><div class="card-value"><% warn_count %></div></div>
+  <div class="card"><div class="card-title">Tags / Commands</div><div class="card-value"><% tag_count %></div></div>
+  <div class="card"><div class="card-title">Mod Actions</div><div class="card-value"><% log_count %></div></div>
+  <div class="card"><div class="card-title">Ranked Members</div><div class="card-value"><% ranked_count %></div></div>
+  <div class="card"><div class="card-title">Mod Notes</div><div class="card-value"><% note_count %></div></div>
+  <div class="card"><div class="card-title">Bot Status</div><div class="card-value"><span class="badge badge-green">Online</span></div></div>
 </div>
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-top:0">
@@ -73,7 +55,7 @@
         <td><span class="badge badge-purple">Lvl <% lvl %></span></td>
         <td><% '{:,}'.format(row['xp']) %></td>
         <td style="min-width:80px">
-          <div style="background:var(--surface2);border-radius:4px;height:6px;width:100%">
+          <div style="background:var(--surface2);border-radius:4px;height:6px">
             <div style="background:var(--accent);border-radius:4px;height:6px;width:<% pct %>%"></div>
           </div>
         </td>
@@ -86,5 +68,42 @@
     {% endif %}
   </div>
 
+</div>
+
+<div class="card" style="margin-top:0">
+  <div class="section-header">
+    <span style="font-weight:600">&#129956; Pterodactyl Servers</span>
+    <a href="/pterodactyl" class="btn btn-ghost" style="font-size:.8rem">Full view &rarr;</a>
+  </div>
+  {% if ptero_error %}
+  <p style="color:var(--muted);font-size:.9rem">&#9888;&#65039; Unreachable: <% ptero_error %></p>
+  {% elif ptero_servers %}
+  <table>
+    <thead><tr><th>Server</th><th>State</th><th>CPU</th><th>RAM</th><th>Uptime</th></tr></thead>
+    <tbody>
+    {% for srv in ptero_servers %}
+    <tr>
+      <td><strong><% srv['name'] %></strong> <code style="font-size:.75rem"><% srv['identifier'] %></code></td>
+      <td>
+        {% if srv.get('error') %}
+        <span class="badge" style="background:#555">error</span>
+        {% elif srv['state'] == 'running' %}
+        <span class="badge badge-green">running</span>
+        {% elif srv['state'] == 'offline' %}
+        <span class="badge badge-red">offline</span>
+        {% else %}
+        <span class="badge badge-purple"><% srv['state'] %></span>
+        {% endif %}
+      </td>
+      <td><% srv.get('cpu', '&#8212;') %>%</td>
+      <td><% srv.get('mem_mb', '&#8212;') %> / <% srv.get('mem_limit_mb', '?') %> MB</td>
+      <td style="color:var(--muted)"><% srv.get('uptime', '&#8212;') %></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted);font-size:.9rem">No servers found. Check PTERODACTYL_API_KEY in .env.</p>
+  {% endif %}
 </div>
 {% endblock %}

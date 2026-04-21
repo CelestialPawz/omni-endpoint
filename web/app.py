@@ -11,15 +11,16 @@ load_dotenv(os.path.join(ROOT, '.env'))
 
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'change-me')
-
 app.jinja_env.variable_start_string = '<%'
 app.jinja_env.variable_end_string   = '%>'
 
-DB_PATH       = os.getenv('DB_PATH', '/data/omni.db')
-CLIENT_ID     = os.getenv('DISCORD_CLIENT_ID', '1494509191749042237')
-CLIENT_SECRET = os.getenv('DISCORD_CLIENT_SECRET', '')
-REDIRECT_URI  = os.getenv('DISCORD_REDIRECT_URI', 'https://omni-endpoint.crystal-kitsune-studios.com/callback')
-GUILD_ID      = os.getenv('GUILD_ID', '')
+DB_PATH             = os.getenv('DB_PATH', '/data/omni.db')
+CLIENT_ID           = os.getenv('DISCORD_CLIENT_ID', '1494509191749042237')
+CLIENT_SECRET       = os.getenv('DISCORD_CLIENT_SECRET', '')
+REDIRECT_URI        = os.getenv('DISCORD_REDIRECT_URI', 'https://omni-endpoint.crystal-kitsune-studios.com/callback')
+GUILD_ID            = os.getenv('GUILD_ID', '')
+PTERODACTYL_URL     = os.getenv('PTERODACTYL_URL', 'https://panel.starlightsserverhosting.uk')
+PTERODACTYL_API_KEY = os.getenv('PTERODACTYL_API_KEY', '')
 
 OAUTH_URL = (
     'https://discord.com/api/oauth2/authorize'
@@ -28,29 +29,75 @@ OAUTH_URL = (
     '&response_type=code&scope=identify+guilds'
 )
 
-# ── Level helpers ────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def level_from_xp(xp):
-    if not xp or xp <= 0:
-        return 0
+    if not xp or xp <= 0: return 0
     return int((-1 + math.sqrt(1 + 4 * xp / 50)) / 2)
 
 def xp_for_level(level):
     return 100 * level * (level + 1) // 2
 
 def xp_progress(xp):
-    level     = level_from_xp(xp)
-    floor     = xp_for_level(level)
-    nxt       = xp_for_level(level + 1)
-    xp_in     = xp - floor
-    xp_needed = nxt - floor
-    pct       = round((xp_in / xp_needed) * 100) if xp_needed else 100
-    return level, xp_in, xp_needed, pct
+    level = level_from_xp(xp)
+    floor = xp_for_level(level)
+    nxt   = xp_for_level(level + 1)
+    xp_in = xp - floor
+    need  = nxt - floor
+    return level, xp_in, need, round((xp_in / need) * 100) if need else 100
 
 app.jinja_env.globals['level_from_xp'] = level_from_xp
 app.jinja_env.globals['xp_progress']   = xp_progress
 
-# ── DB ───────────────────────────────────────────────────────────────────────
+def _uptime_str(ms):
+    s = ms // 1000
+    d, r = divmod(s, 86400); h, r = divmod(r, 3600); m = r // 60
+    parts = []
+    if d: parts.append(f"{d}d")
+    if h: parts.append(f"{h}h")
+    parts.append(f"{m}m")
+    return " ".join(parts) if parts else "0m"
+
+def get_pterodactyl_servers():
+    if not PTERODACTYL_API_KEY:
+        return None, "PTERODACTYL_API_KEY not set in .env"
+    base  = PTERODACTYL_URL.rstrip("/")
+    hdrs  = {"Authorization": f"Bearer {PTERODACTYL_API_KEY}", "Accept": "application/json"}
+    try:
+        data = requests.get(f"{base}/api/client/servers", headers=hdrs, timeout=8).json()
+        servers = []
+        for s in data.get("data", []):
+            attr   = s.get("attributes", {})
+            sid    = attr.get("identifier", "")
+            limits = attr.get("limits", {})
+            try:
+                res      = requests.get(f"{base}/api/client/servers/{sid}/resources", headers=hdrs, timeout=5).json()
+                ra       = res.get("attributes", {})
+                state    = ra.get("current_state", "unknown")
+                rr       = ra.get("resources", {})
+                mem_mb   = round(rr.get("memory_bytes", 0) / 1024**2, 1)
+                disk_mb  = round(rr.get("disk_bytes",   0) / 1024**2, 1)
+                mem_lim  = limits.get("memory", 0)
+                disk_lim = limits.get("disk",   0)
+                servers.append({
+                    "name":          attr.get("name", "Unknown"),
+                    "identifier":    sid,
+                    "state":         state,
+                    "cpu":           round(rr.get("cpu_absolute", 0), 1),
+                    "cpu_limit":     limits.get("cpu", 100),
+                    "mem_mb":        mem_mb,
+                    "mem_limit_mb":  mem_lim,
+                    "mem_pct":       round((mem_mb  / mem_lim)  * 100) if mem_lim  else 0,
+                    "disk_mb":       disk_mb,
+                    "disk_limit_mb": disk_lim,
+                    "disk_pct":      round((disk_mb / disk_lim) * 100) if disk_lim else 0,
+                    "uptime":        _uptime_str(rr.get("uptime", 0)) if state == "running" else "\u2014",
+                })
+            except Exception as e:
+                servers.append({"name": attr.get("name", "?"), "identifier": sid, "state": "unknown", "error": str(e)})
+        return servers, None
+    except Exception as e:
+        return None, str(e)
 
 def get_db():
     db_module.init_db_sync()
@@ -86,8 +133,8 @@ def callback():
         flash('Token exchange failed.', 'danger')
         return redirect(url_for('login'))
     token = r.json().get('access_token')
-    user = requests.get('https://discord.com/api/users/@me',
-                        headers={'Authorization': f'Bearer {token}'}).json()
+    user  = requests.get('https://discord.com/api/users/@me',
+                         headers={'Authorization': f'Bearer {token}'}).json()
     if 'id' not in user:
         flash('Could not fetch user info.', 'danger')
         return redirect(url_for('login'))
@@ -106,22 +153,31 @@ def logout():
 @login_required
 def index():
     conn = get_db()
-    warn_count    = conn.execute('SELECT COUNT(*) FROM warnings').fetchone()[0]
-    tag_count     = conn.execute('SELECT COUNT(*) FROM tags').fetchone()[0]
-    log_count     = conn.execute('SELECT COUNT(*) FROM mod_logs').fetchone()[0]
-    ranked_count  = conn.execute('SELECT COUNT(*) FROM levels').fetchone()[0]
-    note_count    = conn.execute('SELECT COUNT(*) FROM mod_notes').fetchone()[0]
-    recent_logs   = conn.execute('SELECT * FROM mod_logs ORDER BY timestamp DESC LIMIT 5').fetchall()
-    top_users     = conn.execute('SELECT user_id, xp, level FROM levels ORDER BY xp DESC LIMIT 5').fetchall()
+    warn_count   = conn.execute('SELECT COUNT(*) FROM warnings').fetchone()[0]
+    tag_count    = conn.execute('SELECT COUNT(*) FROM tags').fetchone()[0]
+    log_count    = conn.execute('SELECT COUNT(*) FROM mod_logs').fetchone()[0]
+    ranked_count = conn.execute('SELECT COUNT(*) FROM levels').fetchone()[0]
+    note_count   = conn.execute('SELECT COUNT(*) FROM mod_notes').fetchone()[0]
+    recent_logs  = conn.execute('SELECT * FROM mod_logs ORDER BY timestamp DESC LIMIT 5').fetchall()
+    top_users    = conn.execute('SELECT user_id, xp, level FROM levels ORDER BY xp DESC LIMIT 5').fetchall()
     conn.close()
+    ptero_servers, ptero_error = get_pterodactyl_servers()
     return render_template('index.html',
         user=session['user'],
         warn_count=warn_count, tag_count=tag_count,
-        log_count=log_count, ranked_count=ranked_count,
-        note_count=note_count,
-        recent_logs=recent_logs, top_users=top_users)
+        log_count=log_count, ranked_count=ranked_count, note_count=note_count,
+        recent_logs=recent_logs, top_users=top_users,
+        ptero_servers=ptero_servers, ptero_error=ptero_error)
 
-# ── Mod Logs ──────────────────────────────────────────────────────────────────
+# ── Pterodactyl ─────────────────────────────────────────────────────────────
+
+@app.route('/pterodactyl')
+@login_required
+def pterodactyl():
+    servers, error = get_pterodactyl_servers()
+    return render_template('pterodactyl.html', user=session['user'], servers=servers, error=error)
+
+# ── Mod Logs ─────────────────────────────────────────────────────────────────
 
 @app.route('/modlogs')
 @login_required
@@ -144,9 +200,7 @@ def modnotes():
             (f'%{search}%',)
         ).fetchall()
     else:
-        notes = conn.execute(
-            'SELECT * FROM mod_notes ORDER BY timestamp DESC LIMIT 200'
-        ).fetchall()
+        notes = conn.execute('SELECT * FROM mod_notes ORDER BY timestamp DESC LIMIT 200').fetchall()
     conn.close()
     return render_template('modnotes.html', user=session['user'], notes=notes, search=search)
 
@@ -160,15 +214,13 @@ def delete_note(note_id):
     flash('Note deleted.', 'success')
     return redirect(url_for('modnotes'))
 
-# ── Leaderboard ───────────────────────────────────────────────────────────────
+# ── Leaderboard ─────────────────────────────────────────────────────────────
 
 @app.route('/leaderboard')
 @login_required
 def leaderboard():
     conn  = get_db()
-    rows  = conn.execute(
-        'SELECT user_id, xp, level FROM levels ORDER BY xp DESC LIMIT 100'
-    ).fetchall()
+    rows  = conn.execute('SELECT user_id, xp, level FROM levels ORDER BY xp DESC LIMIT 100').fetchall()
     total = conn.execute('SELECT COUNT(*) FROM levels').fetchone()[0]
     conn.close()
     return render_template('leaderboard.html', user=session['user'], rows=rows, total=total)
@@ -183,7 +235,7 @@ def reset_user_xp(user_id):
     flash(f'XP reset for user {user_id}.', 'success')
     return redirect(url_for('leaderboard'))
 
-# ── Tags / Commands ───────────────────────────────────────────────────────────
+# ── Tags ───────────────────────────────────────────────────────────────────────
 
 @app.route('/commands')
 @login_required
@@ -270,7 +322,7 @@ def save_automod():
     flash('AutoMod settings saved.', 'success')
     return redirect(url_for('automod'))
 
-# ── Settings ──────────────────────────────────────────────────────────────────
+# ── Settings ─────────────────────────────────────────────────────────────────
 
 @app.route('/settings')
 @login_required

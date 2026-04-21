@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% set title = 'Pterodactyl' %}
+{% block content %}
+<h1 class="page-title">&#129956; Pterodactyl Servers</h1>
+<p style="color:var(--muted);margin-bottom:1.25rem">
+  <a href="https://panel.starlightsserverhosting.uk" target="_blank" style="color:var(--accent)">panel.starlightsserverhosting.uk</a>
+  &mdash; Live resource data from the Pterodactyl API.
+</p>
+
+{% if error %}
+<div class="card">
+  <p style="color:#f87171">&#9888;&#65039; <strong>Unreachable:</strong> <% error %></p>
+  <p style="color:var(--muted);font-size:.85rem">Check that <code>PTERODACTYL_URL</code> and <code>PTERODACTYL_API_KEY</code> are set in <code>.env</code>.</p>
+</div>
+{% elif not servers %}
+<div class="card">
+  <p style="color:var(--muted)">No servers found on this account.</p>
+</div>
+{% else %}
+{% for srv in servers %}
+<div class="card" style="margin-bottom:1rem">
+  <div class="section-header">
+    <div style="display:flex;align-items:center;gap:.75rem">
+      {% if srv.get('error') %}
+      <span class="badge" style="background:#555;font-size:.85rem">error</span>
+      {% elif srv['state'] == 'running' %}
+      <span class="badge badge-green" style="font-size:.85rem">&#9679; running</span>
+      {% elif srv['state'] == 'offline' %}
+      <span class="badge badge-red" style="font-size:.85rem">&#9679; offline</span>
+      {% else %}
+      <span class="badge badge-purple" style="font-size:.85rem">&#9679; <% srv['state'] %></span>
+      {% endif %}
+      <span style="font-weight:700;font-size:1.05rem"><% srv['name'] %></span>
+      <code style="font-size:.75rem;color:var(--muted)"><% srv['identifier'] %></code>
+    </div>
+    <span style="color:var(--muted);font-size:.85rem">Uptime: <% srv.get('uptime', '&#8212;') %></span>
+  </div>
+
+  {% if srv.get('error') %}
+  <p style="color:#f87171;font-size:.9rem;margin-top:.5rem"><% srv['error'] %></p>
+  {% else %}
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-top:.75rem">
+
+    <div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">CPU</div>
+      <div style="font-size:1.1rem;font-weight:600"><% srv['cpu'] %>%
+        <span style="font-size:.8rem;color:var(--muted)">/ <% srv['cpu_limit'] %>%</span>
+      </div>
+      <div style="background:var(--surface2);border-radius:4px;height:6px;margin-top:.4rem">
+        {% set cpu_pct = ((srv['cpu'] / srv['cpu_limit']) * 100) | int if srv['cpu_limit'] else 0 %}
+        <div style="background:var(--accent);border-radius:4px;height:6px;width:<% [cpu_pct, 100] | min %>%"></div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">RAM</div>
+      <div style="font-size:1.1rem;font-weight:600"><% srv['mem_mb'] %> MB
+        <span style="font-size:.8rem;color:var(--muted)">/ <% srv['mem_limit_mb'] %> MB</span>
+      </div>
+      <div style="background:var(--surface2);border-radius:4px;height:6px;margin-top:.4rem">
+        <div style="background:var(--accent);border-radius:4px;height:6px;width:<% srv['mem_pct'] %>%"></div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">Disk</div>
+      <div style="font-size:1.1rem;font-weight:600"><% srv['disk_mb'] %> MB
+        <span style="font-size:.8rem;color:var(--muted)">/ <% srv['disk_limit_mb'] %> MB</span>
+      </div>
+      <div style="background:var(--surface2);border-radius:4px;height:6px;margin-top:.4rem">
+        <div style="background:{% if srv['disk_pct'] > 85 %}#f87171{% else %}var(--accent){% endif %};border-radius:4px;height:6px;width:<% srv['disk_pct'] %>%"></div>
+      </div>
+    </div>
+
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}
