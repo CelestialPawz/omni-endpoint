@@ -31,6 +31,7 @@ COGS = [
     "cogs.levels",
     "cogs.modmail",
     "cogs.activities",
+    "cogs.music",
 ]
 
 @bot.event
@@ -46,7 +47,7 @@ async def on_ready():
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         cmd = ctx.invoked_with.lower()
-        print(f"[OMNI Endpoint] CommandNotFound: '{cmd}' \u2014 checking tags")
+        print(f"[OMNI Endpoint] CommandNotFound: '{cmd}' — checking tags")
         tag_cmd = bot.get_command('tag')
         if tag_cmd:
             try:

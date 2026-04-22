@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+.chat-wrap { display:flex; flex-direction:column; height:calc(100vh - 120px); max-width:860px; margin:0 auto; }
+.chat-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; }
+.chat-header h1 { margin:0; font-size:1.4rem; }
+.model-badge { font-size:.75rem; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:.2rem .7rem; color:var(--muted); }
+.chat-messages { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:.75rem; padding:.5rem 0 1rem; }
+.msg { max-width:78%; padding:.75rem 1rem; border-radius:12px; font-size:.92rem; line-height:1.55; word-break:break-word; white-space:pre-wrap; }
+.msg.user { align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:3px; }
+.msg.assistant { align-self:flex-start; background:var(--surface); border:1px solid var(--border); border-bottom-left-radius:3px; }
+.msg-label { font-size:.72rem; color:var(--muted); margin-bottom:.25rem; }
+.user-wrap { align-self:flex-end; display:flex; flex-direction:column; align-items:flex-end; }
+.assistant-wrap { align-self:flex-start; display:flex; flex-direction:column; align-items:flex-start; }
+.chat-input-row { display:flex; gap:.6rem; padding-top:.75rem; border-top:1px solid var(--border); }
+.chat-input-row textarea { flex:1; background:var(--bg); border:1px solid var(--border); border-radius:8px;
+  color:var(--text); padding:.6rem .85rem; font-size:.93rem; resize:none; min-height:44px; max-height:120px; }
+.chat-input-row textarea:focus { outline:none; border-color:var(--accent); }
+.btn-send { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:.6rem 1.2rem; cursor:pointer; font-size:.93rem; font-weight:600; white-space:nowrap; }
+.btn-send:hover { opacity:.88; }
+.btn-clear { background:var(--surface); color:var(--muted); border:1px solid var(--border); border-radius:8px; padding:.5rem .9rem; cursor:pointer; font-size:.82rem; }
+.empty-state { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--muted); gap:.5rem; }
+.empty-state .icon { font-size:2.5rem; }
+</style>
+
+<div class="chat-wrap">
+  <div class="chat-header">
+    <h1>&#129504; Groq AI</h1>
+    <div style="display:flex;align-items:center;gap:.75rem">
+      <span class="model-badge"><% model %></span>
+      {% if history %}
+      <form method="POST" style="margin:0">
+        <input type="hidden" name="action" value="clear">
+        <button type="submit" class="btn-clear">Clear chat</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if error %}
+  <div class="alert alert-danger" style="margin-bottom:.75rem"><% error %></div>
+  {% endif %}
+
+  {% if not groq_configured %}
+  <div class="alert alert-warning">GROQ_API_KEY is not set in .env &mdash; add it to enable AI chat.</div>
+  {% endif %}
+
+  <div class="chat-messages" id="chatMessages">
+    {% if not history %}
+    <div class="empty-state">
+      <div class="icon">&#129504;</div>
+      <div>Ask OMNI anything&hellip;</div>
+    </div>
+    {% endif %}
+    {% for msg in history %}
+      {% if msg.role == 'user' %}
+      <div class="user-wrap">
+        <div class="msg-label">You</div>
+        <div class="msg user"><% msg.content %></div>
+      </div>
+      {% else %}
+      <div class="assistant-wrap">
+        <div class="msg-label">OMNI &mdash; <% model %></div>
+        <div class="msg assistant"><% msg.content %></div>
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <form method="POST" class="chat-input-row" id="chatForm">
+    <textarea name="message" id="msgInput" placeholder="Message OMNI..." rows="1" required></textarea>
+    <button type="submit" class="btn-send">Send &#9658;</button>
+  </form>
+</div>
+
+<script>
+  // auto-scroll to bottom
+  const msgs = document.getElementById('chatMessages');
+  msgs.scrollTop = msgs.scrollHeight;
+  // Shift+Enter = newline, Enter = submit
+  document.getElementById('msgInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById('chatForm').submit();
+    }
+  });
+</script>
+{% endblock %}

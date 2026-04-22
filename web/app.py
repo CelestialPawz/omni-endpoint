@@ -1,4 +1,4 @@
-import os, sys, sqlite3, math, requests
+import os, sys, sqlite3, math, requests, json
 from flask import Flask, render_template, redirect, request, session, url_for, flash
 from functools import wraps
 from dotenv import load_dotenv
@@ -21,6 +21,7 @@ REDIRECT_URI        = os.getenv('DISCORD_REDIRECT_URI', 'https://omni-endpoint.c
 GUILD_ID            = os.getenv('GUILD_ID', '')
 PTERODACTYL_URL     = os.getenv('PTERODACTYL_URL', 'https://panel.starlightsserverhosting.uk')
 PTERODACTYL_API_KEY = os.getenv('PTERODACTYL_API_KEY', '')
+GROQ_API_KEY        = os.getenv('GROQ_API_KEY', '')
 
 OAUTH_URL = (
     'https://discord.com/api/oauth2/authorize'
@@ -28,6 +29,9 @@ OAUTH_URL = (
     f'&redirect_uri={requests.utils.quote(REDIRECT_URI, safe="")}'
     '&response_type=code&scope=identify+guilds'
 )
+
+GROQ_MODEL   = 'llama-3.3-70b-versatile'
+GROQ_HEADERS = lambda: {'Authorization': f'Bearer {GROQ_API_KEY}', 'Content-Type': 'application/json'}
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -216,12 +220,61 @@ def index():
         ptero_servers=ptero_servers, ptero_error=ptero_error,
         docker_containers=docker_containers, docker_error=docker_error)
 
+# ── Groq AI ──────────────────────────────────────────────────────────────
+
+@app.route('/ai', methods=['GET', 'POST'])
+@login_required
+def ai_chat():
+    if 'ai_history' not in session:
+        session['ai_history'] = []
+    error = None
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'clear':
+            session['ai_history'] = []
+            session.modified = True
+            return redirect(url_for('ai_chat'))
+        user_msg = request.form.get('message', '').strip()
+        if user_msg and GROQ_API_KEY:
+            history = list(session['ai_history'])
+            history.append({'role': 'user', 'content': user_msg})
+            payload = {
+                'model': GROQ_MODEL,
+                'messages': [
+                    {'role': 'system', 'content': 'You are OMNI, a helpful AI assistant for Crystal Kitsune Studios. Be concise and direct.'}
+                ] + history,
+                'max_tokens': 1024,
+                'temperature': 0.7,
+            }
+            try:
+                r = requests.post(
+                    'https://api.groq.com/openai/v1/chat/completions',
+                    headers=GROQ_HEADERS(),
+                    json=payload,
+                    timeout=30
+                )
+                r.raise_for_status()
+                reply = r.json()['choices'][0]['message']['content']
+                history.append({'role': 'assistant', 'content': reply})
+                session['ai_history'] = history[-40:]  # keep last 20 exchanges
+                session.modified = True
+            except requests.HTTPError as e:
+                error = f'Groq API error: {e.response.status_code} — {e.response.text[:200]}'
+            except Exception as e:
+                error = str(e)
+        elif not GROQ_API_KEY:
+            error = 'GROQ_API_KEY not set in .env'
+    return render_template('ai.html', user=session['user'],
+                           history=session.get('ai_history', []),
+                           model=GROQ_MODEL, error=error,
+                           groq_configured=bool(GROQ_API_KEY))
+
 # ── Ban Appeals (public) ──────────────────────────────────────────────
 
 @app.route('/appeal', methods=['GET', 'POST'])
 def appeal():
     if request.method == 'POST':
-        username = request.form.get('discord_username', '').strip()
+        username   = request.form.get('discord_username', '').strip()
         discord_id = request.form.get('discord_id', '').strip()
         ban_reason = request.form.get('ban_reason', '').strip()
         appeal_msg = request.form.get('appeal_message', '').strip()
@@ -232,14 +285,13 @@ def appeal():
             flash('Discord ID must be a number (e.g. 123456789012345678).', 'danger')
             return render_template('appeal.html')
         conn = get_db()
-        # prevent duplicate pending/open appeals from same ID
         existing = conn.execute(
             "SELECT id FROM ban_appeals WHERE discord_id = ? AND status IN ('pending','open')",
             (discord_id,)
         ).fetchone()
         if existing:
             conn.close()
-            flash('You already have an open appeal being reviewed. Please wait for a response.', 'warning')
+            flash('You already have an open appeal being reviewed.', 'warning')
             return render_template('appeal.html')
         conn.execute(
             'INSERT INTO ban_appeals (discord_username, discord_id, ban_reason, appeal_message) VALUES (?,?,?,?)',
@@ -259,10 +311,7 @@ def appeals():
     status_filter = request.args.get('status', 'all')
     conn = get_db()
     if status_filter != 'all':
-        rows = conn.execute(
-            'SELECT * FROM ban_appeals WHERE status = ? ORDER BY created_at DESC',
-            (status_filter,)
-        ).fetchall()
+        rows = conn.execute('SELECT * FROM ban_appeals WHERE status = ? ORDER BY created_at DESC', (status_filter,)).fetchall()
     else:
         rows = conn.execute('SELECT * FROM ban_appeals ORDER BY created_at DESC').fetchall()
     counts = {
