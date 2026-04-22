@@ -58,13 +58,15 @@ def _uptime_str(ms):
     parts.append(f"{m}m")
     return " ".join(parts) if parts else "0m"
 
+# ── Pterodactyl ───────────────────────────────────────────────────────────────
+
 def get_pterodactyl_servers():
     if not PTERODACTYL_API_KEY:
         return None, "PTERODACTYL_API_KEY not set in .env"
     base  = PTERODACTYL_URL.rstrip("/")
     hdrs  = {"Authorization": f"Bearer {PTERODACTYL_API_KEY}", "Accept": "application/json"}
     try:
-        data = requests.get(f"{base}/api/client/servers", headers=hdrs, timeout=8).json()
+        data = requests.get(f"{base}/api/client", headers=hdrs, timeout=8).json()
         servers = []
         for s in data.get("data", []):
             attr   = s.get("attributes", {})
@@ -99,6 +101,48 @@ def get_pterodactyl_servers():
     except Exception as e:
         return None, str(e)
 
+# ── Docker ────────────────────────────────────────────────────────────────────
+
+def get_docker_stats():
+    try:
+        import docker as docker_sdk
+        client = docker_sdk.DockerClient(base_url='unix://var/run/docker.sock')
+        containers = client.containers.list(all=True)
+        result = []
+        for c in containers:
+            status = c.status
+            cpu_pct = mem_mb = mem_limit_mb = mem_pct = 0
+            if status == 'running':
+                try:
+                    s         = c.stats(stream=False)
+                    cpu_delta = s['cpu_stats']['cpu_usage']['total_usage'] - s['precpu_stats']['cpu_usage']['total_usage']
+                    sys_delta = s['cpu_stats']['system_cpu_usage'] - s['precpu_stats']['system_cpu_usage']
+                    num_cpus  = s['cpu_stats'].get('online_cpus') or len(s['cpu_stats']['cpu_usage'].get('percpu_usage', [None]))
+                    cpu_pct   = round((cpu_delta / sys_delta) * num_cpus * 100.0, 1) if sys_delta > 0 else 0.0
+                    mem_usage = s['memory_stats']['usage'] - s['memory_stats'].get('stats', {}).get('cache', 0)
+                    mem_limit = s['memory_stats']['limit']
+                    mem_mb    = round(mem_usage / 1024**2, 1)
+                    mem_limit_mb = round(mem_limit / 1024**2, 1)
+                    mem_pct   = round((mem_mb / mem_limit_mb) * 100) if mem_limit_mb else 0
+                except Exception:
+                    pass
+            result.append({
+                'name':         c.name,
+                'short_id':     c.short_id,
+                'image':        c.image.tags[0] if c.image.tags else c.image.short_id,
+                'status':       status,
+                'cpu_pct':      cpu_pct,
+                'mem_mb':       mem_mb,
+                'mem_limit_mb': mem_limit_mb,
+                'mem_pct':      mem_pct,
+            })
+        client.close()
+        # running containers first
+        result.sort(key=lambda x: x['status'] != 'running')
+        return result, None
+    except Exception as e:
+        return None, str(e)
+
 def get_db():
     db_module.init_db_sync()
     conn = sqlite3.connect(DB_PATH)
@@ -113,7 +157,7 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
-# ── Auth ─────────────────────────────────────────────────────────────────────
+# ── Auth ──────────────────────────────────────────────────────────────────────
 
 @app.route('/login')
 def login():
@@ -147,7 +191,7 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# ── Dashboard ─────────────────────────────────────────────────────────────────
+# ── Dashboard ──────────────────────────────────────────────────────────────────
 
 @app.route('/')
 @login_required
@@ -161,15 +205,17 @@ def index():
     recent_logs  = conn.execute('SELECT * FROM mod_logs ORDER BY timestamp DESC LIMIT 5').fetchall()
     top_users    = conn.execute('SELECT user_id, xp, level FROM levels ORDER BY xp DESC LIMIT 5').fetchall()
     conn.close()
-    ptero_servers, ptero_error = get_pterodactyl_servers()
+    ptero_servers, ptero_error     = get_pterodactyl_servers()
+    docker_containers, docker_error = get_docker_stats()
     return render_template('index.html',
         user=session['user'],
         warn_count=warn_count, tag_count=tag_count,
         log_count=log_count, ranked_count=ranked_count, note_count=note_count,
         recent_logs=recent_logs, top_users=top_users,
-        ptero_servers=ptero_servers, ptero_error=ptero_error)
+        ptero_servers=ptero_servers, ptero_error=ptero_error,
+        docker_containers=docker_containers, docker_error=docker_error)
 
-# ── Pterodactyl ─────────────────────────────────────────────────────────────
+# ── Pterodactyl ───────────────────────────────────────────────────────────────
 
 @app.route('/pterodactyl')
 @login_required
@@ -177,7 +223,15 @@ def pterodactyl():
     servers, error = get_pterodactyl_servers()
     return render_template('pterodactyl.html', user=session['user'], servers=servers, error=error)
 
-# ── Mod Logs ─────────────────────────────────────────────────────────────────
+# ── Docker ────────────────────────────────────────────────────────────────────
+
+@app.route('/docker')
+@login_required
+def docker_page():
+    containers, error = get_docker_stats()
+    return render_template('docker.html', user=session['user'], containers=containers, error=error)
+
+# ── Mod Logs ──────────────────────────────────────────────────────────────────
 
 @app.route('/modlogs')
 @login_required
@@ -214,7 +268,7 @@ def delete_note(note_id):
     flash('Note deleted.', 'success')
     return redirect(url_for('modnotes'))
 
-# ── Leaderboard ─────────────────────────────────────────────────────────────
+# ── Leaderboard ───────────────────────────────────────────────────────────────
 
 @app.route('/leaderboard')
 @login_required
@@ -235,7 +289,7 @@ def reset_user_xp(user_id):
     flash(f'XP reset for user {user_id}.', 'success')
     return redirect(url_for('leaderboard'))
 
-# ── Tags ───────────────────────────────────────────────────────────────────────
+# ── Tags ──────────────────────────────────────────────────────────────────────
 
 @app.route('/commands')
 @login_required
@@ -322,7 +376,7 @@ def save_automod():
     flash('AutoMod settings saved.', 'success')
     return redirect(url_for('automod'))
 
-# ── Settings ─────────────────────────────────────────────────────────────────
+# ── Settings ──────────────────────────────────────────────────────────────────
 
 @app.route('/settings')
 @login_required

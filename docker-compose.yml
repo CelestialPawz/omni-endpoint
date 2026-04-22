@@ -29,6 +29,7 @@ services:
       - "5000:5000"
     volumes:
       - omni_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       - bot
 

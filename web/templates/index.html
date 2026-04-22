@@ -106,4 +106,39 @@
   <p style="color:var(--muted);font-size:.9rem">No servers found. Check PTERODACTYL_API_KEY in .env.</p>
   {% endif %}
 </div>
+
+<div class="card" style="margin-top:0">
+  <div class="section-header">
+    <span style="font-weight:600">&#128051; Docker Containers</span>
+    <a href="/docker" class="btn btn-ghost" style="font-size:.8rem">Full view &rarr;</a>
+  </div>
+  {% if docker_error %}
+  <p style="color:var(--muted);font-size:.9rem">&#9888;&#65039; Unreachable: <% docker_error %></p>
+  {% elif docker_containers %}
+  <table>
+    <thead><tr><th>Container</th><th>Image</th><th>State</th><th>CPU</th><th>RAM</th></tr></thead>
+    <tbody>
+    {% for c in docker_containers %}
+    <tr>
+      <td><strong><% c['name'] %></strong> <code style="font-size:.75rem"><% c['short_id'] %></code></td>
+      <td><code style="font-size:.75rem"><% c['image'] %></code></td>
+      <td>
+        {% if c['status'] == 'running' %}
+        <span class="badge badge-green">running</span>
+        {% elif c['status'] == 'exited' %}
+        <span class="badge badge-red">exited</span>
+        {% else %}
+        <span class="badge badge-purple"><% c['status'] %></span>
+        {% endif %}
+      </td>
+      <td><% c['cpu_pct'] %>%</td>
+      <td><% c['mem_mb'] %> / <% c['mem_limit_mb'] %> MB</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted);font-size:.9rem">No containers found.</p>
+  {% endif %}
+</div>
 {% endblock %}

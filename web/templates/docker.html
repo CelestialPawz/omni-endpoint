@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% set title = 'Docker' %}
+{% block content %}
+<h1 class="page-title">&#128051; Docker Containers</h1>
+<p style="color:var(--muted);margin-bottom:1.25rem">
+  Live stats via Docker socket &mdash; running containers show CPU &amp; memory usage.
+</p>
+
+{% if error %}
+<div class="card">
+  <p style="color:#f87171">&#9888;&#65039; <strong>Socket error:</strong> <% error %></p>
+  <p style="color:var(--muted);font-size:.85rem">Ensure <code>/var/run/docker.sock</code> is mounted into the web container.</p>
+</div>
+{% elif not containers %}
+<div class="card">
+  <p style="color:var(--muted)">No containers found.</p>
+</div>
+{% else %}
+{% for c in containers %}
+<div class="card" style="margin-bottom:1rem">
+  <div class="section-header">
+    <div style="display:flex;align-items:center;gap:.75rem">
+      {% if c['status'] == 'running' %}
+      <span class="badge badge-green" style="font-size:.85rem">&#9679; running</span>
+      {% elif c['status'] == 'exited' %}
+      <span class="badge badge-red" style="font-size:.85rem">&#9679; exited</span>
+      {% else %}
+      <span class="badge badge-purple" style="font-size:.85rem">&#9679; <% c['status'] %></span>
+      {% endif %}
+      <span style="font-weight:700;font-size:1.05rem"><% c['name'] %></span>
+      <code style="font-size:.75rem;color:var(--muted)"><% c['short_id'] %></code>
+    </div>
+    <span style="color:var(--muted);font-size:.85rem"><% c['image'] %></span>
+  </div>
+
+  {% if c['status'] == 'running' %}
+  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;margin-top:.75rem">
+
+    <div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">CPU</div>
+      <div style="font-size:1.1rem;font-weight:600"><% c['cpu_pct'] %>%</div>
+      <div style="background:var(--surface2);border-radius:4px;height:6px;margin-top:.4rem">
+        {% set cpu_bar = [c['cpu_pct'] | int, 100] | min %}
+        <div style="background:{% if c['cpu_pct'] > 80 %}#f87171{% elif c['cpu_pct'] > 50 %}#fbbf24{% else %}var(--accent){% endif %};border-radius:4px;height:6px;width:<% cpu_bar %>%"></div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:.3rem">RAM</div>
+      <div style="font-size:1.1rem;font-weight:600"><% c['mem_mb'] %> MB
+        <span style="font-size:.8rem;color:var(--muted)">/ <% c['mem_limit_mb'] %> MB</span>
+      </div>
+      <div style="background:var(--surface2);border-radius:4px;height:6px;margin-top:.4rem">
+        <div style="background:{% if c['mem_pct'] > 85 %}#f87171{% else %}var(--accent){% endif %};border-radius:4px;height:6px;width:<% c['mem_pct'] %>%"></div>
+      </div>
+    </div>
+
+  </div>
+  {% else %}
+  <p style="color:var(--muted);font-size:.85rem;margin-top:.5rem">Container is not running &mdash; no resource data available.</p>
+  {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}
