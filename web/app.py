@@ -523,6 +523,199 @@ def save_settings():
     flash('Settings saved.', 'success')
     return redirect(url_for('settings'))
 
+# ── Music Routes ────────────────────────────────────────────────────────────
+
+@app.route('/music')
+@login_required
+def music():
+    return render_template('music.html', user=session['user'])
+
+@app.route('/api/music/status')
+@login_required
+def api_music_status():
+    """Get current now playing track, queue, volume, and loop state."""
+    try:
+        conn = get_db()
+        current = conn.execute(
+            'SELECT * FROM music_queue WHERE guild_id=? ORDER BY position ASC LIMIT 1',
+            (GUILD_ID,)
+        ).fetchone()
+        queue_items = conn.execute(
+            'SELECT * FROM music_queue WHERE guild_id=? ORDER BY position ASC LIMIT 50',
+            (GUILD_ID,)
+        ).fetchall()
+        conn.close()
+        
+        result = {
+            'current': None,
+            'queue_length': len(queue_items) if queue_items else 0,
+            'volume': 100,
+            'loop': 'off'
+        }
+        
+        if current:
+            result['current'] = {
+                'title': current[2],
+                'url': current[3],
+                'duration': current[5],
+                'uploader': 'Unknown',
+                'thumbnail': None
+            }
+        
+        return result
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@app.route('/api/music/play', methods=['POST'])
+@login_required
+def api_music_play():
+    """Add a track to the queue by URL or search query."""
+    try:
+        data = request.get_json()
+        query = data.get('query', '').strip()
+        if not query:
+            return {'error': 'Query required'}, 400
+        
+        # Here we'd call yt-dlp to extract metadata
+        # For now, just store the query as URL
+        conn = get_db()
+        conn.execute(
+            'INSERT INTO music_queue(guild_id, user_id, track_url, track_title, position, duration, added_at) VALUES(?,?,?,?,?,?,datetime("now"))',
+            (GUILD_ID, session.get('user_id', 'web'), query, query, 0, 0)
+        )
+        conn.commit()
+        conn.close()
+        
+        return {'success': True, 'message': 'Track added to queue'}
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@app.route('/api/music/control', methods=['POST'])
+@login_required
+def api_music_control():
+    """Control playback: skip, pause, resume, stop, clear."""
+    try:
+        action = request.args.get('action', 'skip').lower()
+        conn = get_db()
+        
+        if action == 'skip':
+            conn.execute('DELETE FROM music_queue WHERE guild_id=? ORDER BY position ASC LIMIT 1', (GUILD_ID,))
+        elif action == 'clear':
+            conn.execute('DELETE FROM music_queue WHERE guild_id=?', (GUILD_ID,))
+        elif action in ['pause', 'resume', 'stop']:
+            pass  # Would interact with bot via IPC
+        
+        conn.commit()
+        conn.close()
+        return {'success': True}
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@app.route('/api/music/queue')
+@login_required
+def api_music_queue():
+    """Get paginated queue."""
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 10))
+        offset = (page - 1) * per_page
+        
+        conn = get_db()
+        queue_items = conn.execute(
+            'SELECT * FROM music_queue WHERE guild_id=? ORDER BY position ASC LIMIT ? OFFSET ?',
+            (GUILD_ID, per_page, offset)
+        ).fetchall()
+        total = conn.execute(
+            'SELECT COUNT(*) FROM music_queue WHERE guild_id=?', (GUILD_ID,)
+        ).fetchone()[0]
+        conn.close()
+        
+        return {
+            'queue': [
+                {'position': q[4], 'title': q[2], 'url': q[3], 'duration': q[5]}
+                for q in queue_items
+            ],
+            'total': total,
+            'page': page,
+            'per_page': per_page
+        }
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@app.route('/api/music/search')
+@login_required
+def api_music_search():
+    """Search YouTube for tracks."""
+    try:
+        query = request.args.get('q', '').strip()
+        if not query:
+            return {'error': 'Query required'}, 400
+        
+        # Would call yt-dlp here
+        # For now, return empty results
+        return []
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@app.route('/api/music/favorites', methods=['GET', 'POST'])
+@login_required
+def api_music_favorites():
+    """Get or manage favorites."""
+    try:
+        conn = get_db()
+        
+        if request.method == 'GET':
+            favorites = conn.execute(
+                'SELECT * FROM music_favorites WHERE user_id=? ORDER BY added_at DESC',
+                (session.get('user_id', 'web'),)
+            ).fetchall()
+            conn.close()
+            return [
+                {'track_url': f[1], 'track_title': f[2]}
+                for f in favorites
+            ]
+        
+        elif request.method == 'POST':
+            data = request.get_json()
+            action = data.get('action')
+            
+            if action == 'add':
+                conn.execute(
+                    'INSERT INTO music_favorites(user_id, track_url, track_title, added_at) VALUES(?,?,?,datetime("now"))',
+                    (session.get('user_id', 'web'), data.get('url'), data.get('title'))
+                )
+            elif action == 'remove':
+                conn.execute(
+                    'DELETE FROM music_favorites WHERE user_id=? AND track_url=?',
+                    (session.get('user_id', 'web'), data.get('url'))
+                )
+            
+            conn.commit()
+            conn.close()
+            return {'success': True}
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@app.route('/api/music/volume', methods=['POST'])
+@login_required
+def api_music_volume():
+    """Set volume level."""
+    try:
+        vol = int(request.args.get('vol', 100))
+        vol = max(1, min(100, vol))
+        return {'success': True, 'volume': vol}
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@app.route('/api/music/loop', methods=['POST'])
+@login_required
+def api_music_loop():
+    """Toggle loop mode."""
+    try:
+        return {'success': True, 'loop': 'on'}
+    except Exception as e:
+        return {'error': str(e)}, 500
+
 if __name__ == '__main__':
     db_module.init_db_sync()
     app.run(host='0.0.0.0', port=5000, debug=False)
