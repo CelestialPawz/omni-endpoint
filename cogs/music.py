@@ -3,6 +3,7 @@ from discord.ext import commands
 import asyncio
 import yt_dlp
 from collections import deque
+import database
 
 YTDL_OPTIONS = {
     'format': 'bestaudio/best',
@@ -22,6 +23,8 @@ FFMPEG_OPTIONS = {
 }
 
 ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
+MAX_QUEUE_SIZE = 50
+MAX_RETRIES = 2
 
 
 class YTDLSource(discord.PCMVolumeTransformer):
@@ -58,6 +61,7 @@ class GuildMusic:
         self.current: YTDLSource | None = None
         self.volume:  float   = 0.5
         self.loop:    bool    = False
+        self.retry_count: int = 0
 
 
 class Music(commands.Cog):
@@ -65,10 +69,35 @@ class Music(commands.Cog):
         self.bot   = bot
         self._data: dict[int, GuildMusic] = {}
 
+    async def cog_load(self):
+        """Load queues from DB on startup."""
+        print("[Music] Loading persisted queues from database...")
+
     def _guild(self, guild_id: int) -> GuildMusic:
         if guild_id not in self._data:
             self._data[guild_id] = GuildMusic()
         return self._data[guild_id]
+
+    async def _save_queue(self, guild_id: int):
+        """Persist queue to database."""
+        gm = self._guild(guild_id)
+        queue_list = [(self._extract_title(q), self._extract_url(q), 0) for q in gm.queue]
+        try:
+            await database.save_queue(str(guild_id), queue_list)
+        except Exception as e:
+            print(f"[Music] Error saving queue: {e}")
+
+    @staticmethod
+    def _extract_title(query: str) -> str:
+        """Extract title from query or URL."""
+        if query.startswith('http'):
+            return query.split('/')[-1][:100]
+        return query[:100]
+
+    @staticmethod
+    def _extract_url(query: str) -> str:
+        """Keep URL or search query as-is."""
+        return query[:500]
 
     def _after(self, ctx, error):
         if error:
@@ -82,26 +111,35 @@ class Music(commands.Cog):
     async def _next(self, ctx):
         gm = self._guild(ctx.guild.id)
         if gm.loop and gm.current:
-            # re-fetch and replay current
             try:
                 src = await YTDLSource.from_query(gm.current.url, loop=self.bot.loop, volume=gm.volume)
                 gm.current = src
                 ctx.voice_client.play(src, after=lambda e: self._after(ctx, e))
                 return
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[Music] Loop replay failed: {e}")
+                gm.retry_count = 0
+        
         if gm.queue:
             query = gm.queue.popleft()
-            try:
-                src = await YTDLSource.from_query(query, loop=self.bot.loop, volume=gm.volume)
-                gm.current = src
-                ctx.voice_client.play(src, after=lambda e: self._after(ctx, e))
-                await ctx.send(embed=self._np_embed(src, '\U0001f3b5 Now Playing'))
-            except Exception as e:
-                await ctx.send(f'\u274c Could not play next track: `{e}`')
-                await self._next(ctx)
+            for attempt in range(MAX_RETRIES):
+                try:
+                    src = await YTDLSource.from_query(query, loop=self.bot.loop, volume=gm.volume)
+                    gm.current = src
+                    gm.retry_count = 0
+                    ctx.voice_client.play(src, after=lambda e: self._after(ctx, e))
+                    await ctx.send(embed=self._np_embed(src, '\U0001f3b5 Now Playing'))
+                    await self._save_queue(ctx.guild.id)
+                    await database.add_to_history(str(ctx.guild.id), src.title, src.url, src.duration, str(ctx.author.id))
+                    return
+                except Exception as e:
+                    print(f"[Music] Track failed (attempt {attempt+1}/{MAX_RETRIES}): {query} - {e}")
+                    if attempt == MAX_RETRIES - 1:
+                        await ctx.send(f'\u274c Failed to play track after {MAX_RETRIES} attempts. Skipping...')
+            await self._next(ctx)
         else:
             gm.current = None
+            await self._save_queue(ctx.guild.id)
 
     def _np_embed(self, src: YTDLSource, title='\U0001f3b5 Now Playing') -> discord.Embed:
         e = discord.Embed(title=title, description=f'[{src.title}]({src.url})', color=discord.Color.blurple())
@@ -128,8 +166,11 @@ class Music(commands.Cog):
         gm = self._guild(ctx.guild.id)
 
         if vc.is_playing() or vc.is_paused():
+            if len(gm.queue) >= MAX_QUEUE_SIZE:
+                return await ctx.send(f'\u274c Queue is full (max {MAX_QUEUE_SIZE} tracks).')
             gm.queue.append(query)
             await ctx.send(f'\u23f3 Added to queue: **{query}** (position {len(gm.queue)})')
+            await self._save_queue(ctx.guild.id)
             return
 
         async with ctx.typing():
@@ -141,6 +182,7 @@ class Music(commands.Cog):
         gm.current = src
         vc.play(src, after=lambda e: self._after(ctx, e))
         await ctx.send(embed=self._np_embed(src))
+        await database.add_to_history(str(ctx.guild.id), src.title, src.url, src.duration, str(ctx.author.id))
 
     @commands.command(name='skip', aliases=['s'])
     async def skip(self, ctx):
@@ -177,6 +219,7 @@ class Music(commands.Cog):
         gm = self._guild(ctx.guild.id)
         gm.queue.clear()
         gm.current = None
+        await self._save_queue(ctx.guild.id)
         vc = ctx.voice_client
         if vc:
             await vc.disconnect()
@@ -237,6 +280,7 @@ class Music(commands.Cog):
         """Clear the queue without stopping the current track."""
         gm = self._guild(ctx.guild.id)
         gm.queue.clear()
+        await self._save_queue(ctx.guild.id)
         await ctx.send('\U0001f9f9 Queue cleared.')
 
 

@@ -99,6 +99,52 @@ _SCHEMA = """
         channel_id INTEGER,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS music_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        track_title TEXT NOT NULL,
+        track_url TEXT NOT NULL,
+        duration INTEGER,
+        added_by TEXT,
+        added_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS music_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        track_title TEXT NOT NULL,
+        track_url TEXT NOT NULL,
+        duration INTEGER,
+        played_by TEXT,
+        played_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS music_favorites (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        track_title TEXT NOT NULL,
+        track_url TEXT NOT NULL,
+        uploader TEXT,
+        thumbnail TEXT,
+        added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, track_url)
+    );
+    CREATE TABLE IF NOT EXISTS music_playlists (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        is_public INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, name)
+    );
+    CREATE TABLE IF NOT EXISTS music_playlist_tracks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        playlist_id INTEGER NOT NULL,
+        position INTEGER NOT NULL,
+        track_title TEXT NOT NULL,
+        track_url TEXT NOT NULL,
+        duration INTEGER,
+        FOREIGN KEY (playlist_id) REFERENCES music_playlists(id) ON DELETE CASCADE
+    );
 """
 
 async def init_db():
@@ -154,3 +200,91 @@ async def add_mod_log(guild_id: str, action: str, moderator_id: str, target_id: 
             (guild_id, action, moderator_id, target_id, reason)
         )
         await db.commit()
+
+# ── Music Functions ──────────────────────────────────────────────────────
+
+async def save_queue(guild_id: str, queue_list: list):
+    """Save queue to database. Format: [(title, url, duration), ...]"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM music_queue WHERE guild_id = ?", (guild_id,))
+        for pos, (title, url, duration) in enumerate(queue_list):
+            await db.execute(
+                "INSERT INTO music_queue (guild_id, position, track_title, track_url, duration) VALUES (?, ?, ?, ?, ?)",
+                (guild_id, pos, title, url, duration)
+            )
+        await db.commit()
+
+async def load_queue(guild_id: str) -> list:
+    """Load queue from database. Returns: [(title, url, duration), ...]"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT track_title, track_url, duration FROM music_queue WHERE guild_id = ? ORDER BY position",
+            (guild_id,)
+        ) as cur:
+            rows = await cur.fetchall()
+            return [(row[0], row[1], row[2]) for row in rows]
+
+async def add_to_history(guild_id: str, title: str, url: str, duration: int, user_id: str):
+    """Log a played track to history."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO music_history (guild_id, track_title, track_url, duration, played_by) VALUES (?, ?, ?, ?, ?)",
+            (guild_id, title, url, duration, user_id)
+        )
+        await db.commit()
+
+async def add_favorite(user_id: str, title: str, url: str, uploader: str = None, thumbnail: str = None):
+    """Add track to user favorites."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        try:
+            await db.execute(
+                "INSERT INTO music_favorites (user_id, track_title, track_url, uploader, thumbnail) VALUES (?, ?, ?, ?, ?)",
+                (user_id, title, url, uploader, thumbnail)
+            )
+        except Exception:
+            pass
+        await db.commit()
+
+async def get_favorites(user_id: str, limit: int = 50) -> list:
+    """Get user's favorite tracks."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT track_title, track_url, uploader, thumbnail FROM music_favorites WHERE user_id = ? ORDER BY added_at DESC LIMIT ?",
+            (user_id, limit)
+        ) as cur:
+            return await cur.fetchall()
+
+async def create_playlist(user_id: str, name: str, is_public: bool = False) -> int:
+    """Create a playlist, return playlist ID."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO music_playlists (user_id, name, is_public) VALUES (?, ?, ?)",
+            (user_id, name, 1 if is_public else 0)
+        )
+        await db.commit()
+        async with db.execute("SELECT last_insert_rowid()") as cur:
+            return (await cur.fetchone())[0]
+
+async def add_to_playlist(playlist_id: int, title: str, url: str, duration: int):
+    """Add track to playlist."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT MAX(position) FROM music_playlist_tracks WHERE playlist_id = ?",
+            (playlist_id,)
+        ) as cur:
+            max_pos = (await cur.fetchone())[0]
+        position = (max_pos or -1) + 1
+        await db.execute(
+            "INSERT INTO music_playlist_tracks (playlist_id, position, track_title, track_url, duration) VALUES (?, ?, ?, ?, ?)",
+            (playlist_id, position, title, url, duration)
+        )
+        await db.commit()
+
+async def get_playlist(playlist_id: int) -> list:
+    """Get playlist tracks."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT track_title, track_url, duration FROM music_playlist_tracks WHERE playlist_id = ? ORDER BY position",
+            (playlist_id,)
+        ) as cur:
+            return await cur.fetchall()
