@@ -89,6 +89,16 @@ _SCHEMA = """
         closed INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS ban_appeals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        discord_username TEXT NOT NULL,
+        discord_id TEXT NOT NULL,
+        ban_reason TEXT,
+        appeal_message TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        channel_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
 """
 
 async def init_db():

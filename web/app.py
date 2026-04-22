@@ -29,7 +29,7 @@ OAUTH_URL = (
     '&response_type=code&scope=identify+guilds'
 )
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────
 
 def level_from_xp(xp):
     if not xp or xp <= 0: return 0
@@ -58,7 +58,7 @@ def _uptime_str(ms):
     parts.append(f"{m}m")
     return " ".join(parts) if parts else "0m"
 
-# ── Pterodactyl ───────────────────────────────────────────────────────────────
+# ── Pterodactyl ───────────────────────────────────────────────────────────
 
 def get_pterodactyl_servers():
     if not PTERODACTYL_API_KEY:
@@ -101,7 +101,7 @@ def get_pterodactyl_servers():
     except Exception as e:
         return None, str(e)
 
-# ── Docker ────────────────────────────────────────────────────────────────────
+# ── Docker ──────────────────────────────────────────────────────────────
 
 def get_docker_stats():
     try:
@@ -137,7 +137,6 @@ def get_docker_stats():
                 'mem_pct':      mem_pct,
             })
         client.close()
-        # running containers first
         result.sort(key=lambda x: x['status'] != 'running')
         return result, None
     except Exception as e:
@@ -157,7 +156,7 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
-# ── Auth ──────────────────────────────────────────────────────────────────────
+# ── Auth ──────────────────────────────────────────────────────────────────
 
 @app.route('/login')
 def login():
@@ -191,31 +190,92 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# ── Dashboard ──────────────────────────────────────────────────────────────────
+# ── Dashboard ───────────────────────────────────────────────────────────
 
 @app.route('/')
 @login_required
 def index():
     conn = get_db()
-    warn_count   = conn.execute('SELECT COUNT(*) FROM warnings').fetchone()[0]
-    tag_count    = conn.execute('SELECT COUNT(*) FROM tags').fetchone()[0]
-    log_count    = conn.execute('SELECT COUNT(*) FROM mod_logs').fetchone()[0]
-    ranked_count = conn.execute('SELECT COUNT(*) FROM levels').fetchone()[0]
-    note_count   = conn.execute('SELECT COUNT(*) FROM mod_notes').fetchone()[0]
-    recent_logs  = conn.execute('SELECT * FROM mod_logs ORDER BY timestamp DESC LIMIT 5').fetchall()
-    top_users    = conn.execute('SELECT user_id, xp, level FROM levels ORDER BY xp DESC LIMIT 5').fetchall()
+    warn_count    = conn.execute('SELECT COUNT(*) FROM warnings').fetchone()[0]
+    tag_count     = conn.execute('SELECT COUNT(*) FROM tags').fetchone()[0]
+    log_count     = conn.execute('SELECT COUNT(*) FROM mod_logs').fetchone()[0]
+    ranked_count  = conn.execute('SELECT COUNT(*) FROM levels').fetchone()[0]
+    note_count    = conn.execute('SELECT COUNT(*) FROM mod_notes').fetchone()[0]
+    appeal_count  = conn.execute("SELECT COUNT(*) FROM ban_appeals WHERE status = 'open'").fetchone()[0]
+    recent_logs   = conn.execute('SELECT * FROM mod_logs ORDER BY timestamp DESC LIMIT 5').fetchall()
+    top_users     = conn.execute('SELECT user_id, xp, level FROM levels ORDER BY xp DESC LIMIT 5').fetchall()
     conn.close()
-    ptero_servers, ptero_error     = get_pterodactyl_servers()
+    ptero_servers, ptero_error      = get_pterodactyl_servers()
     docker_containers, docker_error = get_docker_stats()
     return render_template('index.html',
         user=session['user'],
         warn_count=warn_count, tag_count=tag_count,
         log_count=log_count, ranked_count=ranked_count, note_count=note_count,
+        appeal_count=appeal_count,
         recent_logs=recent_logs, top_users=top_users,
         ptero_servers=ptero_servers, ptero_error=ptero_error,
         docker_containers=docker_containers, docker_error=docker_error)
 
-# ── Pterodactyl ───────────────────────────────────────────────────────────────
+# ── Ban Appeals (public) ──────────────────────────────────────────────
+
+@app.route('/appeal', methods=['GET', 'POST'])
+def appeal():
+    if request.method == 'POST':
+        username = request.form.get('discord_username', '').strip()
+        discord_id = request.form.get('discord_id', '').strip()
+        ban_reason = request.form.get('ban_reason', '').strip()
+        appeal_msg = request.form.get('appeal_message', '').strip()
+        if not username or not discord_id or not appeal_msg:
+            flash('Please fill in all required fields.', 'danger')
+            return render_template('appeal.html')
+        if not discord_id.isdigit():
+            flash('Discord ID must be a number (e.g. 123456789012345678).', 'danger')
+            return render_template('appeal.html')
+        conn = get_db()
+        # prevent duplicate pending/open appeals from same ID
+        existing = conn.execute(
+            "SELECT id FROM ban_appeals WHERE discord_id = ? AND status IN ('pending','open')",
+            (discord_id,)
+        ).fetchone()
+        if existing:
+            conn.close()
+            flash('You already have an open appeal being reviewed. Please wait for a response.', 'warning')
+            return render_template('appeal.html')
+        conn.execute(
+            'INSERT INTO ban_appeals (discord_username, discord_id, ban_reason, appeal_message) VALUES (?,?,?,?)',
+            (username, discord_id, ban_reason, appeal_msg)
+        )
+        conn.commit()
+        conn.close()
+        flash('Your appeal has been submitted! Staff will review it shortly.', 'success')
+        return render_template('appeal.html', submitted=True)
+    return render_template('appeal.html')
+
+# ── Ban Appeals (staff) ───────────────────────────────────────────────
+
+@app.route('/appeals')
+@login_required
+def appeals():
+    status_filter = request.args.get('status', 'all')
+    conn = get_db()
+    if status_filter != 'all':
+        rows = conn.execute(
+            'SELECT * FROM ban_appeals WHERE status = ? ORDER BY created_at DESC',
+            (status_filter,)
+        ).fetchall()
+    else:
+        rows = conn.execute('SELECT * FROM ban_appeals ORDER BY created_at DESC').fetchall()
+    counts = {
+        'pending': conn.execute("SELECT COUNT(*) FROM ban_appeals WHERE status='pending'").fetchone()[0],
+        'open':    conn.execute("SELECT COUNT(*) FROM ban_appeals WHERE status='open'").fetchone()[0],
+        'accept':  conn.execute("SELECT COUNT(*) FROM ban_appeals WHERE status='accept'").fetchone()[0],
+        'deny':    conn.execute("SELECT COUNT(*) FROM ban_appeals WHERE status='deny'").fetchone()[0],
+    }
+    conn.close()
+    return render_template('appeals.html', user=session['user'], appeals=rows,
+                           status_filter=status_filter, counts=counts)
+
+# ── Pterodactyl ───────────────────────────────────────────────────────────
 
 @app.route('/pterodactyl')
 @login_required
@@ -223,7 +283,7 @@ def pterodactyl():
     servers, error = get_pterodactyl_servers()
     return render_template('pterodactyl.html', user=session['user'], servers=servers, error=error)
 
-# ── Docker ────────────────────────────────────────────────────────────────────
+# ── Docker ──────────────────────────────────────────────────────────────
 
 @app.route('/docker')
 @login_required
@@ -231,7 +291,7 @@ def docker_page():
     containers, error = get_docker_stats()
     return render_template('docker.html', user=session['user'], containers=containers, error=error)
 
-# ── Mod Logs ──────────────────────────────────────────────────────────────────
+# ── Mod Logs ────────────────────────────────────────────────────────────
 
 @app.route('/modlogs')
 @login_required
@@ -241,7 +301,7 @@ def modlogs():
     conn.close()
     return render_template('modlogs.html', user=session['user'], logs=logs)
 
-# ── Mod Notes ─────────────────────────────────────────────────────────────────
+# ── Mod Notes ────────────────────────────────────────────────────────────
 
 @app.route('/modnotes')
 @login_required
@@ -268,7 +328,7 @@ def delete_note(note_id):
     flash('Note deleted.', 'success')
     return redirect(url_for('modnotes'))
 
-# ── Leaderboard ───────────────────────────────────────────────────────────────
+# ── Leaderboard ──────────────────────────────────────────────────────────
 
 @app.route('/leaderboard')
 @login_required
@@ -289,7 +349,7 @@ def reset_user_xp(user_id):
     flash(f'XP reset for user {user_id}.', 'success')
     return redirect(url_for('leaderboard'))
 
-# ── Tags ──────────────────────────────────────────────────────────────────────
+# ── Tags ──────────────────────────────────────────────────────────────────
 
 @app.route('/commands')
 @login_required
@@ -343,7 +403,7 @@ def delete_command(tag_id):
     flash('Tag deleted.', 'success')
     return redirect(url_for('commands'))
 
-# ── AutoMod ───────────────────────────────────────────────────────────────────
+# ── AutoMod ─────────────────────────────────────────────────────────────
 
 @app.route('/automod')
 @login_required
@@ -376,7 +436,7 @@ def save_automod():
     flash('AutoMod settings saved.', 'success')
     return redirect(url_for('automod'))
 
-# ── Settings ──────────────────────────────────────────────────────────────────
+# ── Settings ─────────────────────────────────────────────────────────────
 
 @app.route('/settings')
 @login_required

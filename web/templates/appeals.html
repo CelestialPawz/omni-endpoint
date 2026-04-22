@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-header">
+  <h1>&#128683; Ban Appeals</h1>
+</div>
+
+<div class="filter-bar" style="display:flex;gap:.5rem;margin-bottom:1.2rem;flex-wrap:wrap;">
+  {% for s, label in [('all','All'), ('pending','Pending'), ('open','Open'), ('accept','Accepted'), ('deny','Denied')] %}
+  <a href="/appeals?status=<% s %>" class="badge {% if status_filter == s %}badge-active{% endif %}"
+     style="padding:.3rem .8rem;border-radius:20px;text-decoration:none;font-size:.82rem;
+            background:{% if status_filter == s %}var(--accent){% else %}var(--surface){% endif %};
+            color:{% if status_filter == s %}#fff{% else %}var(--muted){% endif %};border:1px solid var(--border);">
+    <% label %>
+    {% if s == 'pending' and counts.pending %}<span style="margin-left:.3rem;background:#f04747;color:#fff;border-radius:10px;padding:0 .4rem;font-size:.75rem"><% counts.pending %></span>{% endif %}
+    {% if s == 'open' and counts.open %}<span style="margin-left:.3rem;background:#faa61a;color:#fff;border-radius:10px;padding:0 .4rem;font-size:.75rem"><% counts.open %></span>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+
+{% if not appeals %}
+<div class="card" style="text-align:center;color:var(--muted);padding:2rem">No appeals found.</div>
+{% else %}
+<div style="display:flex;flex-direction:column;gap:.75rem;">
+{% for a in appeals %}
+<div class="card" style="padding:1.1rem 1.3rem;">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.6rem;">
+    <div>
+      <strong style="font-size:1rem"><% a['discord_username'] %></strong>
+      <span style="color:var(--muted);font-size:.82rem;margin-left:.5rem">ID: <% a['discord_id'] %></span>
+    </div>
+    <div style="display:flex;gap:.4rem;align-items:center">
+      <span class="badge"
+        style="padding:.2rem .7rem;border-radius:12px;font-size:.78rem;font-weight:600;
+          background:{% if a['status']=='pending' %}#4e4e1a{% elif a['status']=='open' %}#1a3e4e{% elif a['status']=='accept' %}#1a4e2a{% elif a['status']=='deny' %}#4e1a1a{% else %}var(--surface){% endif %};
+          color:{% if a['status']=='pending' %}#faa61a{% elif a['status']=='open' %}#5bc8f5{% elif a['status']=='accept' %}#43b581{% elif a['status']=='deny' %}#f04747{% else %}var(--muted){% endif %}">
+        <% a['status'].upper() %>
+      </span>
+      <span style="font-size:.78rem;color:var(--muted)"><% a['created_at'] %></span>
+    </div>
+  </div>
+  {% if a['ban_reason'] %}
+  <div style="font-size:.85rem;color:var(--muted);margin-bottom:.4rem">
+    <strong>Thinks they were banned for:</strong> <% a['ban_reason'] %>
+  </div>
+  {% endif %}
+  <div style="background:var(--bg);border-radius:6px;padding:.65rem .85rem;font-size:.9rem;white-space:pre-wrap;word-break:break-word">
+    <% a['appeal_message'] %>
+  </div>
+  {% if a['channel_id'] %}
+  <div style="margin-top:.5rem;font-size:.78rem;color:var(--muted)">&#128172; Discord channel ID: <% a['channel_id'] %></div>
+  {% endif %}
+</div>
+{% endfor %}
+</div>
+{% endif %}
+{% endblock %}

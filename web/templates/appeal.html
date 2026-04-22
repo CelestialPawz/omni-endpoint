@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ban Appeal — Crystal Kitsune Studios</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:var(--bg); }
+  .appeal-box { background:var(--surface); border-radius:12px; padding:2.5rem; max-width:560px; width:100%; box-shadow:0 4px 24px rgba(0,0,0,.4); }
+  .appeal-box h1 { margin:0 0 .25rem; font-size:1.5rem; }
+  .appeal-box p.sub { color:var(--muted); margin:0 0 1.5rem; font-size:.9rem; }
+  .form-group { margin-bottom:1.1rem; }
+  .form-group label { display:block; font-size:.85rem; color:var(--muted); margin-bottom:.35rem; }
+  .form-group input, .form-group textarea {
+    width:100%; background:var(--bg); border:1px solid var(--border);
+    border-radius:6px; padding:.55rem .75rem; color:var(--text); font-size:.95rem;
+    box-sizing:border-box;
+  }
+  .form-group textarea { min-height:120px; resize:vertical; }
+  .form-group input:focus, .form-group textarea:focus { outline:none; border-color:var(--accent); }
+  .required { color:#f04747; }
+  .btn-submit { width:100%; padding:.7rem; background:var(--accent); color:#fff;
+    border:none; border-radius:6px; font-size:1rem; cursor:pointer; font-weight:600; }
+  .btn-submit:hover { opacity:.88; }
+  .alert { padding:.75rem 1rem; border-radius:6px; margin-bottom:1rem; font-size:.9rem; }
+  .alert-success { background:#2d7a47; color:#fff; }
+  .alert-danger  { background:#7a2d2d; color:#fff; }
+  .alert-warning { background:#7a6b2d; color:#fff; }
+  .success-state { text-align:center; padding:1.5rem 0; }
+  .success-state .icon { font-size:3rem; margin-bottom:.5rem; }
+  .panel-link { display:block; text-align:center; margin-top:1.5rem; font-size:.82rem; color:var(--muted); }
+  .panel-link a { color:var(--accent); text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="appeal-box">
+  <h1>&#128683; Ban Appeal</h1>
+  <p class="sub">Crystal Kitsune Studios &mdash; fill out the form below and staff will review your appeal.</p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+    <div class="alert alert-<% cat %>"><% msg %></div>
+    {% endfor %}
+  {% endwith %}
+
+  {% if submitted %}
+  <div class="success-state">
+    <div class="icon">&#9989;</div>
+    <h2>Appeal submitted!</h2>
+    <p style="color:var(--muted);font-size:.9rem">Staff will review your appeal and respond as soon as possible. You do not need to submit again.</p>
+  </div>
+  {% else %}
+  <form method="POST" action="/appeal">
+    <div class="form-group">
+      <label>Discord Username <span class="required">*</span></label>
+      <input type="text" name="discord_username" placeholder="e.g. cooluser or cooluser#1234" required>
+    </div>
+    <div class="form-group">
+      <label>Discord User ID <span class="required">*</span>
+        <span style="font-size:.78rem;color:var(--muted)"> &mdash; Settings &rarr; Advanced &rarr; Developer Mode, then right-click your name</span>
+      </label>
+      <input type="text" name="discord_id" placeholder="e.g. 123456789012345678" pattern="[0-9]+" required>
+    </div>
+    <div class="form-group">
+      <label>Why do you think you were banned?</label>
+      <input type="text" name="ban_reason" placeholder="Optional &mdash; share what you know">
+    </div>
+    <div class="form-group">
+      <label>Your appeal <span class="required">*</span></label>
+      <textarea name="appeal_message" placeholder="Explain why you believe the ban should be lifted. Be honest and respectful." required></textarea>
+    </div>
+    <button type="submit" class="btn-submit">&#128228; Submit Appeal</button>
+  </form>
+  {% endif %}
+
+  <span class="panel-link">Staff? <a href="/login">Go to panel</a></span>
+</div>
+</body>
+</html>

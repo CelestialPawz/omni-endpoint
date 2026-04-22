@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import aiosqlite
 import re
 import database
@@ -9,6 +9,10 @@ import config
 class ModMail(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.appeal_check.start()
+
+    def cog_unload(self):
+        self.appeal_check.cancel()
 
     # ── DB helpers ──────────────────────────────────────────────────────
 
@@ -48,60 +52,120 @@ class ModMail(commands.Cog):
 
     # ── Channel helpers ───────────────────────────────────────────────
 
-    def _channel_name(self, user: discord.User) -> str:
-        safe = re.sub(r"[^a-z0-9-]", "-", user.name.lower())
-        safe = re.sub(r"-+", "-", safe).strip("-") or "user"
-        return f"mail-{safe}"
+    def _safe_name(self, name: str) -> str:
+        safe = re.sub(r"[^a-z0-9-]", "-", name.lower())
+        return re.sub(r"-+", "-", safe).strip("-") or "user"
 
-    async def _get_category(self, guild: discord.Guild) -> discord.CategoryChannel | None:
+    async def _get_category(self, guild: discord.Guild):
         cat = guild.get_channel(config.MODMAIL_CATEGORY_ID)
         if cat and isinstance(cat, discord.CategoryChannel):
             return cat
         return None
 
-    # ── Listener ─────────────────────────────────────────────────────────
+    async def _create_channel(self, guild: discord.Guild, name: str, topic: str) -> discord.TextChannel:
+        category = await self._get_category(guild)
+        overwrites = dict(category.overwrites) if category else {}
+        overwrites[guild.default_role] = discord.PermissionOverwrite(read_messages=False)
+        return await guild.create_text_channel(
+            name=name,
+            category=category,
+            overwrites=overwrites,
+            topic=topic,
+        )
+
+    # ── Appeal task loop ───────────────────────────────────────────────
+
+    @tasks.loop(seconds=30)
+    async def appeal_check(self):
+        if not config.MODMAIL_CATEGORY_ID:
+            return
+        guild = None
+        for g in self.bot.guilds:
+            if g.get_channel(config.MODMAIL_CATEGORY_ID):
+                guild = g
+                break
+        if not guild:
+            return
+
+        async with aiosqlite.connect(database.DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT * FROM ban_appeals WHERE status = 'pending' ORDER BY created_at ASC"
+            ) as cur:
+                appeals = await cur.fetchall()
+
+            for appeal in appeals:
+                try:
+                    safe = self._safe_name(appeal["discord_username"])
+                    channel = await self._create_channel(
+                        guild,
+                        name=f"appeal-{safe}",
+                        topic=f"Ban Appeal | {appeal['discord_username']} ({appeal['discord_id']})",
+                    )
+                    embed = discord.Embed(
+                        title="\U0001f6a8 Ban Appeal",
+                        color=discord.Color.red(),
+                        timestamp=discord.utils.utcnow(),
+                    )
+                    embed.add_field(name="Discord Username", value=appeal["discord_username"], inline=True)
+                    embed.add_field(name="Discord ID", value=f"`{appeal['discord_id']}`", inline=True)
+                    embed.add_field(name="\u200b", value="\u200b", inline=True)
+                    embed.add_field(
+                        name="Why they think they were banned",
+                        value=appeal["ban_reason"] or "*Not provided*",
+                        inline=False
+                    )
+                    embed.add_field(
+                        name="Appeal Message",
+                        value=appeal["appeal_message"][:1000],
+                        inline=False
+                    )
+                    embed.set_footer(text=f"Appeal #{appeal['id']} \u00b7 Submitted via web panel")
+                    await channel.send(
+                        embed=embed,
+                        content="Use `!close accept [reason]` or `!close deny [reason]` to resolve."
+                    )
+                    await db.execute(
+                        "UPDATE ban_appeals SET status = 'open', channel_id = ? WHERE id = ?",
+                        (channel.id, appeal["id"])
+                    )
+                    await db.commit()
+                except Exception as e:
+                    print(f"[ModMail] Appeal #{appeal['id']} channel creation failed: {e}")
+
+    @appeal_check.before_loop
+    async def before_appeal_check(self):
+        await self.bot.wait_until_ready()
+
+    # ── DM listener ──────────────────────────────────────────────────────
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot:
             return
 
-        # ─ Incoming DM from user ─────────────────────────────────────
+        # ─ Incoming DM ─────────────────────────────────────────────
         if isinstance(message.channel, discord.DMChannel):
             if not config.MODMAIL_CATEGORY_ID:
                 return
-
             user_id    = str(message.author.id)
             channel_id = await self._get_channel_id(user_id)
             channel    = self.bot.get_channel(channel_id) if channel_id else None
 
             if not channel:
-                # Find the guild via the category
                 guild = None
                 for g in self.bot.guilds:
-                    cat = g.get_channel(config.MODMAIL_CATEGORY_ID)
-                    if cat:
+                    if g.get_channel(config.MODMAIL_CATEGORY_ID):
                         guild = g
                         break
                 if not guild:
                     return
-
-                category = await self._get_category(guild)
-                if not category:
-                    return
-
-                # Create a new channel in the category
-                overwrites = dict(category.overwrites)
-                overwrites[guild.default_role] = discord.PermissionOverwrite(read_messages=False)
-                channel = await guild.create_text_channel(
-                    name=self._channel_name(message.author),
-                    category=category,
-                    overwrites=overwrites,
+                channel = await self._create_channel(
+                    guild,
+                    name=f"mail-{self._safe_name(message.author.name)}",
                     topic=f"ModMail | {message.author} ({message.author.id})",
-                    reason=f"ModMail opened by {message.author}",
                 )
                 await self._open_session(user_id, channel.id)
-
                 intro = discord.Embed(
                     title="\U0001f4ec New ModMail",
                     color=discord.Color.blurple(),
@@ -114,96 +178,93 @@ class ModMail(commands.Cog):
                 )
                 intro.set_thumbnail(url=message.author.display_avatar.url)
                 await channel.send(embed=intro)
-
                 try:
-                    await message.author.send(
-                        embed=discord.Embed(
-                            title="\U0001f4ec ModMail opened",
-                            description="Your message has been received. Staff will reply here shortly.",
-                            color=discord.Color.blurple()
-                        )
-                    )
+                    await message.author.send(embed=discord.Embed(
+                        title="\U0001f4ec ModMail opened",
+                        description="Your message has been received. Staff will reply here shortly.",
+                        color=discord.Color.blurple()
+                    ))
                 except discord.Forbidden:
                     pass
 
-            # Forward user message to staff channel
             embed = discord.Embed(
                 description=message.content or "*[no text content]*",
                 color=0x5865f2,
                 timestamp=message.created_at,
             )
-            embed.set_author(
-                name=f"{message.author} (User)",
-                icon_url=message.author.display_avatar.url
-            )
+            embed.set_author(name=f"{message.author} (User)", icon_url=message.author.display_avatar.url)
             if message.attachments:
-                embed.add_field(
-                    name="Attachments",
-                    value="\n".join(a.url for a in message.attachments),
-                    inline=False
-                )
+                embed.add_field(name="Attachments", value="\n".join(a.url for a in message.attachments), inline=False)
             await channel.send(embed=embed)
             await message.add_reaction("\u2705")
             return
 
-        # ─ Staff reply in modmail channel ──────────────────────────
+        # ─ Staff reply in modmail/appeal channel ──────────────────────
         if isinstance(message.channel, discord.TextChannel):
-            if not message.channel.category_id == config.MODMAIL_CATEGORY_ID:
+            if message.channel.category_id != config.MODMAIL_CATEGORY_ID:
                 return
             if message.content.startswith(config.PREFIX):
-                return  # let commands handle it
-
+                return
             user_id = await self._get_user_id(message.channel.id)
             if not user_id:
                 return
-
             try:
                 user = self.bot.get_user(int(user_id)) or await self.bot.fetch_user(int(user_id))
             except Exception:
                 return
-
             embed = discord.Embed(
                 description=message.content or "*[no text content]*",
                 color=0x57f287,
                 timestamp=message.created_at,
             )
-            embed.set_author(
-                name=f"Staff \u00b7 {message.author.display_name}",
-                icon_url=message.author.display_avatar.url
-            )
+            embed.set_author(name=f"Staff \u00b7 {message.author.display_name}", icon_url=message.author.display_avatar.url)
             embed.set_footer(text="Reply from the moderation team")
             if message.attachments:
-                embed.add_field(
-                    name="Attachments",
-                    value="\n".join(a.url for a in message.attachments),
-                    inline=False
-                )
+                embed.add_field(name="Attachments", value="\n".join(a.url for a in message.attachments), inline=False)
             try:
                 await user.send(embed=embed)
                 await message.add_reaction("\u2705")
             except discord.Forbidden:
                 await message.add_reaction("\u274c")
-                await message.channel.send(
-                    "\u26a0\ufe0f Could not DM user \u2014 they may have DMs disabled.",
-                    delete_after=10
-                )
+                await message.channel.send("\u26a0\ufe0f Could not DM user \u2014 DMs may be disabled.", delete_after=10)
 
     # ── Commands ──────────────────────────────────────────────────────────
 
     @commands.command(name="close")
     @commands.has_permissions(manage_messages=True)
-    async def close_thread(self, ctx, *, reason: str = "No reason provided"):
-        """Close a ModMail channel. Usage: !close [reason]"""
+    async def close_thread(self, ctx, verdict: str = None, *, reason: str = "No reason provided"):
+        """Close a ModMail or appeal channel. Usage: !close [accept|deny] [reason]"""
         if not isinstance(ctx.channel, discord.TextChannel):
             return
         if ctx.channel.category_id != config.MODMAIL_CATEGORY_ID:
             return
 
+        # Check if this is an appeal channel
+        async with aiosqlite.connect(database.DB_PATH) as db:
+            async with db.execute(
+                "SELECT id, discord_id, discord_username FROM ban_appeals WHERE channel_id = ? AND status = 'open'",
+                (ctx.channel.id,)
+            ) as cur:
+                appeal = await cur.fetchone()
+
+        if appeal:
+            appeal_id, discord_id, discord_username = appeal
+            status = verdict.lower() if verdict in ("accept", "deny") else "closed"
+            async with aiosqlite.connect(database.DB_PATH) as db:
+                await db.execute(
+                    "UPDATE ban_appeals SET status = ? WHERE id = ?",
+                    (status, appeal_id)
+                )
+                await db.commit()
+            await ctx.send(f"\u2705 Appeal #{appeal_id} marked as **{status}**. Reason: {reason}")
+            await ctx.channel.delete(reason=f"Appeal {status} by {ctx.author}: {reason}")
+            return
+
+        # Regular modmail
         user_id = await self._get_user_id(ctx.channel.id)
         if not user_id:
             await ctx.send("\u274c No active session found for this channel.")
             return
-
         try:
             user = self.bot.get_user(int(user_id)) or await self.bot.fetch_user(int(user_id))
             await user.send(embed=discord.Embed(
@@ -213,7 +274,6 @@ class ModMail(commands.Cog):
             ))
         except Exception:
             pass
-
         await self._close_session(user_id)
         await ctx.send(f"\u2705 Closing. Reason: {reason}")
         await ctx.channel.delete(reason=f"ModMail closed by {ctx.author}: {reason}")
