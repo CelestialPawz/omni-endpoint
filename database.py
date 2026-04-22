@@ -83,6 +83,12 @@ _SCHEMA = """
         role_id INTEGER NOT NULL,
         PRIMARY KEY (guild_id, level_required)
     );
+    CREATE TABLE IF NOT EXISTS modmail_sessions (
+        user_id TEXT PRIMARY KEY,
+        thread_id INTEGER NOT NULL,
+        closed INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
 """
 
 async def init_db():

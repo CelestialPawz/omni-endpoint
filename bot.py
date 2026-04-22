@@ -29,6 +29,8 @@ COGS = [
     "cogs.utility",
     "cogs.modnotes",
     "cogs.levels",
+    "cogs.modmail",
+    "cogs.activities",
 ]
 
 @bot.event
@@ -58,6 +60,8 @@ async def on_command_error(ctx, error):
         await ctx.send(f"\u274c Missing argument: `{error.param.name}`. See `!help`.")
     elif isinstance(error, commands.MemberNotFound):
         await ctx.send("\u274c Member not found.")
+    elif isinstance(error, commands.MissingPermissions):
+        await ctx.send("\u274c You don't have permission to use this command.")
     else:
         print(f"[ERROR] Command '{ctx.command}' raised: {error}")
         traceback.print_exception(type(error), error, error.__traceback__)
