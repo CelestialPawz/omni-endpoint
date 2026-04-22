@@ -73,6 +73,15 @@ class Help(commands.Cog):
             inline=False
         )
         embed.add_field(
+            name="\U0001f3b5 Music",
+            value=(
+                "`!play <query>` · `!skip` · `!pause` · `!resume` · `!stop`\n"
+                "`!queue` / `!q` · `!np` — Now playing\n"
+                "`!volume <0-100>` · `!loop` · `!clear` — Queue tools"
+            ),
+            inline=False
+        )
+        embed.add_field(
             name="\U0001f3ae Fun",
             value=(
                 "`!8ball` `!coinflip` `!roll` `!meme` `!joke` `!fact`\n"
