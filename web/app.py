@@ -220,6 +220,22 @@ def index():
         ptero_servers=ptero_servers, ptero_error=ptero_error,
         docker_containers=docker_containers, docker_error=docker_error)
 
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    """Enhanced dashboard with comprehensive bot statistics."""
+    try:
+        stats = db_module.get_dashboard_stats_sync()
+        conn = get_db()
+        appeal_count = conn.execute("SELECT COUNT(*) FROM ban_appeals WHERE status = 'pending'").fetchone()[0]
+        conn.close()
+        stats['pending_appeals'] = appeal_count
+        return render_template('dashboard.html', user=session['user'], stats=stats)
+    except Exception as e:
+        print(f"[Dashboard Error] {e}")
+        flash(f'Dashboard error: {e}', 'danger')
+        return redirect(url_for('index'))
+
 # ── Groq AI ──────────────────────────────────────────────────────────────
 
 @app.route('/ai', methods=['GET', 'POST'])

@@ -1,0 +1,167 @@
+<%extends 'base.html'%>
+
+<%block name='title'%>Dashboard - OMNI Endpoint<%endblock%>
+
+<%block name='content'%>
+<div class="dashboard-container">
+    <h1>📊 Bot Dashboard</h1>
+    <p class="subtitle">Real-time statistics and insights</p>
+
+    <!-- Quick Stats Grid -->
+    <div class="stats-grid">
+        <!-- Total Tags -->
+        <div class="stat-card">
+            <div class="stat-icon">📌</div>
+            <div class="stat-content">
+                <div class="stat-value"><% stats.total_tags %></div>
+                <div class="stat-label">Total Tags</div>
+                <div class="stat-detail">Across <% stats.guild_count %> guilds</div>
+            </div>
+        </div>
+
+        <!-- Tag Usage -->
+        <div class="stat-card">
+            <div class="stat-icon">✨</div>
+            <div class="stat-content">
+                <div class="stat-value"><% stats.tag_stats.total_uses %></div>
+                <div class="stat-label">Total Tag Uses</div>
+                <div class="stat-detail">Avg: <% stats.tag_stats.avg_uses %> per tag</div>
+            </div>
+        </div>
+
+        <!-- Active Users (Levels) -->
+        <div class="stat-card">
+            <div class="stat-icon">👥</div>
+            <div class="stat-content">
+                <div class="stat-value"><% stats.level_stats.total_users %></div>
+                <div class="stat-label">Active Users</div>
+                <div class="stat-detail">Avg Level: <% stats.level_stats.avg_level %></div>
+            </div>
+        </div>
+
+        <!-- Pending Appeals -->
+        <div class="stat-card">
+            <div class="stat-icon">📋</div>
+            <div class="stat-content">
+                <div class="stat-value"><% stats.pending_appeals %></div>
+                <div class="stat-label">Pending Appeals</div>
+                <div class="stat-detail"><a href="/appeals" class="quick-link">View All</a></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Tags Section -->
+    <div class="dashboard-section">
+        <h2>🔥 Top Tags</h2>
+        <% if stats.tag_stats.top_tags %>
+            <table class="stats-table">
+                <thead>
+                    <tr>
+                        <th>Tag Name</th>
+                        <th>Uses</th>
+                        <th>Rank</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% for i, tag in enumerate(stats.tag_stats.top_tags) %>
+                        <tr>
+                            <td><strong><% tag.name %></strong></td>
+                            <td><% tag.uses %> times</td>
+                            <td>
+                                <span class="rank-badge rank-<% i + 1 %>">
+                                    <% ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'][i] %>
+                                </span>
+                            </td>
+                        </tr>
+                    <% endfor %>
+                </tbody>
+            </table>
+        <% else %>
+            <p class="empty-state">No tags yet</p>
+        <% endif %>
+    </div>
+
+    <!-- Level Distribution -->
+    <div class="dashboard-section">
+        <h2>📈 Level Distribution</h2>
+        <% if stats.level_stats.top_levels %>
+            <div class="level-distribution">
+                <% for level_info in stats.level_stats.top_levels %>
+                    <div class="level-row">
+                        <div class="level-badge">Level <% level_info.level %></div>
+                        <div class="level-bar">
+                            <div class="level-fill" style="width: <% min((level_info.users / 10) * 100, 100) %>%"></div>
+                        </div>
+                        <div class="level-count"><% level_info.users %> users</div>
+                    </div>
+                <% endfor %>
+            </div>
+        <% else %>
+            <p class="empty-state">No active levels yet</p>
+        <% endif %>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="dashboard-section">
+        <h2>📝 Recent Moderation Activity</h2>
+        <% if stats.recent_logs %>
+            <div class="activity-feed">
+                <% for log in stats.recent_logs %>
+                    <div class="activity-item">
+                        <div class="activity-icon">
+                            <% if 'kick' in log.action.lower() %>🚪
+                            <% elif 'ban' in log.action.lower() %>⛔
+                            <% elif 'warn' in log.action.lower() %>⚠️
+                            <% elif 'mute' in log.action.lower() %>🔇
+                            <% else %>📌
+                            <% endif %>
+                        </div>
+                        <div class="activity-content">
+                            <div class="activity-action">
+                                <strong><% log.action %></strong>
+                                <% if log.reason %> - <em><% log.reason %></em><% endif %>
+                            </div>
+                            <div class="activity-meta">
+                                Moderator: <code><% log.moderator %></code> • <% log.timestamp %>
+                            </div>
+                        </div>
+                    </div>
+                <% endfor %>
+            </div>
+        <% else %>
+            <p class="empty-state">No recent activity</p>
+        <% endif %>
+    </div>
+
+    <!-- Usage Trends -->
+    <div class="dashboard-section">
+        <h2>📊 7-Day Command Usage</h2>
+        <% if stats.usage_trend %>
+            <div class="usage-chart">
+                <% for day in stats.usage_trend %>
+                    <div class="chart-bar">
+                        <div class="bar-container">
+                            <div class="bar-fill" style="height: <% (day.count / 50) * 100 %>%"></div>
+                        </div>
+                        <div class="bar-label"><% day.date %></div>
+                        <div class="bar-value"><% day.count %></div>
+                    </div>
+                <% endfor %>
+            </div>
+        <% else %>
+            <p class="empty-state">No usage data yet</p>
+        <% endif %>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="dashboard-actions">
+        <h2>⚡ Quick Actions</h2>
+        <div class="action-buttons">
+            <a href="/commands" class="btn btn-primary">📌 Manage Tags</a>
+            <a href="/leaderboard" class="btn btn-info">🏆 View Leaderboard</a>
+            <a href="/modlogs" class="btn btn-warning">📋 View Mod Logs</a>
+            <a href="/appeals" class="btn btn-secondary">📝 Ban Appeals</a>
+        </div>
+    </div>
+</div>
+<%endblock%>

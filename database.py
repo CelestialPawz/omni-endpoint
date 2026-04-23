@@ -288,3 +288,122 @@ async def get_playlist(playlist_id: int) -> list:
             (playlist_id,)
         ) as cur:
             return await cur.fetchall()
+
+# ── Dashboard Stats Functions ────────────────────────────────────────────
+
+def get_total_tags_sync() -> int:
+    """Get total count of tags (synchronous for Flask)."""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.execute("SELECT COUNT(*) FROM tags")
+    count = cur.fetchone()[0]
+    conn.close()
+    return count
+
+def get_tags_by_guild_sync() -> dict:
+    """Get tag count per guild (synchronous)."""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.execute("SELECT guild_id, COUNT(*) as count FROM tags GROUP BY guild_id ORDER BY count DESC")
+    result = {row[0]: row[1] for row in cur.fetchall()}
+    conn.close()
+    return result
+
+def get_total_guilds_sync() -> int:
+    """Get count of unique guilds with tags (synchronous)."""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.execute("SELECT COUNT(DISTINCT guild_id) FROM tags")
+    count = cur.fetchone()[0]
+    conn.close()
+    return count
+
+def get_tag_stats_sync() -> dict:
+    """Get aggregated tag statistics (synchronous)."""
+    conn = sqlite3.connect(DB_PATH)
+    stats = {}
+    
+    # Total uses
+    cur = conn.execute("SELECT COALESCE(SUM(uses), 0) FROM tags")
+    stats['total_uses'] = cur.fetchone()[0]
+    
+    # Most used tags
+    cur = conn.execute("SELECT name, uses FROM tags ORDER BY uses DESC LIMIT 5")
+    stats['top_tags'] = [{'name': row[0], 'uses': row[1]} for row in cur.fetchall()]
+    
+    # Average uses per tag
+    cur = conn.execute("SELECT AVG(uses) FROM tags")
+    avg = cur.fetchone()[0]
+    stats['avg_uses'] = round(avg, 2) if avg else 0
+    
+    conn.close()
+    return stats
+
+def get_active_levels_sync() -> dict:
+    """Get level distribution statistics (synchronous)."""
+    conn = sqlite3.connect(DB_PATH)
+    stats = {}
+    
+    # Total users with levels
+    cur = conn.execute("SELECT COUNT(DISTINCT user_id) FROM levels WHERE xp > 0")
+    stats['total_users'] = cur.fetchone()[0]
+    
+    # Average level
+    cur = conn.execute("SELECT AVG(level) FROM levels WHERE level > 0")
+    avg_level = cur.fetchone()[0]
+    stats['avg_level'] = round(avg_level, 2) if avg_level else 0
+    
+    # Top levels
+    cur = conn.execute("SELECT level, COUNT(*) as count FROM levels WHERE level > 0 GROUP BY level ORDER BY level DESC LIMIT 5")
+    stats['top_levels'] = [{'level': row[0], 'users': row[1]} for row in cur.fetchall()]
+    
+    conn.close()
+    return stats
+
+def get_recent_mod_logs_sync(limit: int = 10) -> list:
+    """Get recent moderation logs (synchronous)."""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.execute(
+        "SELECT action, moderator_id, target_id, reason, timestamp FROM mod_logs ORDER BY timestamp DESC LIMIT ?",
+        (limit,)
+    )
+    logs = [
+        {'action': row[0], 'moderator': row[1], 'target': row[2], 'reason': row[3], 'timestamp': row[4]}
+        for row in cur.fetchall()
+    ]
+    conn.close()
+    return logs
+
+def get_guild_count_sync() -> int:
+    """Get count of distinct guilds in the bot database (synchronous)."""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.execute("SELECT COUNT(DISTINCT guild_id) FROM guild_settings")
+    count = cur.fetchone()[0]
+    conn.close()
+    return count
+
+def get_command_usage_by_date_sync(days: int = 7) -> list:
+    """Get command usage count by date for last N days (synchronous)."""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.execute(
+        """
+        SELECT DATE(timestamp) as date, COUNT(*) as count 
+        FROM mod_logs 
+        WHERE timestamp >= datetime('now', '-' || ? || ' days')
+        GROUP BY DATE(timestamp)
+        ORDER BY date ASC
+        """,
+        (days,)
+    )
+    result = [{'date': row[0], 'count': row[1]} for row in cur.fetchall()]
+    conn.close()
+    return result
+
+def get_dashboard_stats_sync() -> dict:
+    """Get all dashboard statistics in one call (synchronous)."""
+    return {
+        'total_tags': get_total_tags_sync(),
+        'total_guilds': get_total_guilds_sync(),
+        'guild_count': get_guild_count_sync(),
+        'tag_stats': get_tag_stats_sync(),
+        'level_stats': get_active_levels_sync(),
+        'recent_logs': get_recent_mod_logs_sync(5),
+        'usage_trend': get_command_usage_by_date_sync(7),
+    }
