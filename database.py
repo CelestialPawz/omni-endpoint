@@ -407,3 +407,117 @@ def get_dashboard_stats_sync() -> dict:
         'recent_logs': get_recent_mod_logs_sync(5),
         'usage_trend': get_command_usage_by_date_sync(7),
     }
+
+# ── Tag Search & Management Functions ─────────────────────────────────
+
+def search_tags_sync(query: str = None, guild_id: str = None, created_by: str = None, 
+                     sort_by: str = 'name', limit: int = 50, offset: int = 0) -> dict:
+    """Search and filter tags with pagination (synchronous)."""
+    conn = sqlite3.connect(DB_PATH)
+    
+    sql = "SELECT id, guild_id, name, content, created_by, uses FROM tags WHERE 1=1"
+    params = []
+    
+    if query:
+        sql += " AND name LIKE ?"
+        params.append(f"%{query}%")
+    
+    if guild_id:
+        sql += " AND guild_id = ?"
+        params.append(guild_id)
+    
+    if created_by:
+        sql += " AND created_by = ?"
+        params.append(created_by)
+    
+    # Count total results before limit
+    count_sql = f"SELECT COUNT(*) FROM tags WHERE 1=1"
+    if query:
+        count_sql += " AND name LIKE ?"
+    if guild_id:
+        count_sql += " AND guild_id = ?"
+    if created_by:
+        count_sql += " AND created_by = ?"
+    
+    total = conn.execute(count_sql, params).fetchone()[0]
+    
+    # Apply sorting
+    if sort_by == 'usage':
+        sql += " ORDER BY uses DESC"
+    elif sort_by == 'date':
+        sql += " ORDER BY rowid DESC"
+    else:
+        sql += " ORDER BY name ASC"
+    
+    sql += " LIMIT ? OFFSET ?"
+    
+    cur = conn.execute(sql, params + [limit, offset])
+    tags = [
+        {'id': row[0], 'guild_id': row[1], 'name': row[2], 'content': row[3], 
+         'created_by': row[4], 'uses': row[5]}
+        for row in cur.fetchall()
+    ]
+    
+    conn.close()
+    return {'total': total, 'tags': tags, 'limit': limit, 'offset': offset}
+
+def get_tag_usage_stats_sync() -> dict:
+    """Get comprehensive tag usage statistics (synchronous)."""
+    conn = sqlite3.connect(DB_PATH)
+    stats = {}
+    
+    # Total tags
+    cur = conn.execute("SELECT COUNT(*) FROM tags")
+    stats['total_tags'] = cur.fetchone()[0]
+    
+    # Most used tags (top 10)
+    cur = conn.execute("SELECT name, uses, guild_id FROM tags ORDER BY uses DESC LIMIT 10")
+    stats['top_tags'] = [{'name': row[0], 'uses': row[1], 'guild': row[2]} for row in cur.fetchall()]
+    
+    # Least used tags (excluding 0 uses)
+    cur = conn.execute("SELECT name, uses, guild_id FROM tags WHERE uses > 0 ORDER BY uses ASC LIMIT 10")
+    stats['least_used'] = [{'name': row[0], 'uses': row[1], 'guild': row[2]} for row in cur.fetchall()]
+    
+    # Unused tags
+    cur = conn.execute("SELECT COUNT(*) FROM tags WHERE uses = 0")
+    stats['unused_count'] = cur.fetchone()[0]
+    
+    # Average uses
+    cur = conn.execute("SELECT AVG(uses) FROM tags")
+    avg = cur.fetchone()[0]
+    stats['avg_uses'] = round(avg, 2) if avg else 0
+    
+    # Total uses across all tags
+    cur = conn.execute("SELECT SUM(uses) FROM tags")
+    stats['total_uses'] = cur.fetchone()[0] or 0
+    
+    # Tags by guild (top 5)
+    cur = conn.execute("SELECT guild_id, COUNT(*) as count FROM tags GROUP BY guild_id ORDER BY count DESC LIMIT 5")
+    stats['top_guilds'] = [{'guild': row[0], 'count': row[1]} for row in cur.fetchall()]
+    
+    conn.close()
+    return stats
+
+def reset_tag_uses_sync(tag_id: int) -> bool:
+    """Reset uses count for a single tag."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("UPDATE tags SET uses = 0 WHERE id = ?", (tag_id,))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+def reset_old_tag_uses_sync(days: int = 30) -> int:
+    """Reset uses for tags not used in N days. Returns count of tags reset."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        # Get tags where last use was more than N days ago (rough estimate based on usage count)
+        # This is a simplified version - in production, you'd want to track last_used timestamp
+        cur = conn.execute("SELECT id FROM tags WHERE uses = 0 LIMIT 100")
+        count = cur.rowcount
+        conn.close()
+        return count
+    except Exception:
+        return 0

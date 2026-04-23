@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
 {% set title = 'Commands' %}
 {% block content %}
-<h1 class="page-title">&#127991; Tags &amp; Commands</h1>
+<h1 class="page-title">📌 Tags & Commands</h1>
 
-<div class="card">
+<div class="card" style="margin-bottom: 1.5rem;">
   <div class="section-header" style="margin-bottom:1rem">
     <span style="font-weight:600">Add New Tag</span>
   </div>
@@ -16,30 +16,89 @@
       <label class="form-label">Content</label>
       <input class="form-control" name="content" placeholder="Response text..." required>
     </div>
-    <button type="submit" class="btn btn-primary">&#43; Add Tag</button>
+    <button type="submit" class="btn btn-primary">+ Add Tag</button>
   </form>
 </div>
 
+<!-- Search and Filter Section -->
+<div class="card" style="margin-bottom: 1.5rem;">
+  <div class="section-header" style="margin-bottom: 1rem;">
+    <span style="font-weight: 600;">🔍 Search & Filter</span>
+    <button class="btn btn-ghost" style="font-size: .8rem;" onclick="toggleFilters()">Show Filters</button>
+  </div>
+  
+  <div id="filterPanel" style="display: none; padding: 1rem; background: var(--surface); border-radius: 8px; margin-bottom: 1rem;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+      <div class="form-group" style="margin: 0;">
+        <label class="form-label">Search Name</label>
+        <input class="form-control" id="searchQuery" placeholder="Filter by name...">
+      </div>
+      <div class="form-group" style="margin: 0;">
+        <label class="form-label">Sort By</label>
+        <select class="form-control" id="sortBy" onchange="applyFilters()">
+          <option value="name">Name (A-Z)</option>
+          <option value="usage">Most Used</option>
+          <option value="date">Newest First</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+      <button class="btn btn-primary" style="font-size: 0.85rem;" onclick="applyFilters()">Apply Filters</button>
+      <button class="btn btn-ghost" style="font-size: 0.85rem;" onclick="resetFilters()">Reset</button>
+    </div>
+  </div>
+
+  <div id="statsPreview" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+    <!-- Stats will be loaded here by JS -->
+  </div>
+</div>
+
+<!-- Bulk Actions -->
+<div class="card" style="margin-bottom: 1.5rem;">
+  <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+    <input type="checkbox" id="selectAll" onchange="toggleSelectAll()" style="width: 18px; height: 18px;">
+    <span style="font-weight: 600;">Select All</span>
+    <div id="bulkActions" style="display: none; flex: 1; text-align: right;">
+      <span id="selectedCount" style="color: var(--muted); margin-right: 1rem;"></span>
+      <form id="bulkDeleteForm" method="POST" action="/commands/bulk-delete" style="display: inline;">
+        <button type="submit" class="btn btn-danger" style="font-size: 0.85rem;" onclick="return confirm('Delete selected tags?')">Delete Selected</button>
+      </form>
+      <form id="bulkResetForm" method="POST" action="/commands/reset-uses" style="display: inline; margin-left: 0.5rem;">
+        <button type="submit" class="btn btn-warning" style="font-size: 0.85rem;">Reset Uses</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Tags Table -->
 <div class="card">
   {% if tags %}
   <table>
-    <thead><tr><th>Name</th><th>Content</th><th>Created By</th><th>Uses</th><th style="width:220px"></th></tr></thead>
+    <thead><tr>
+      <th style="width: 40px;"><input type="checkbox" id="headerCheckbox" onchange="toggleSelectAll()"></th>
+      <th>Name</th>
+      <th>Content</th>
+      <th>Created By</th>
+      <th>Uses</th>
+      <th style="width: 220px;">Actions</th>
+    </tr></thead>
     <tbody>
     {% for tag in tags %}
-    <tr>
+    <tr class="tag-row">
+      <td><input type="checkbox" class="tag-checkbox" name="tag_ids[]" value="<% tag['id'] %>" onchange="updateBulkUI()"></td>
       <td><code>!<% tag['name'] %></code></td>
-      <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><% tag['content'] %></td>
+      <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<% tag['content'] %>"><% tag['content'] %></td>
       <td style="color:var(--muted);font-size:.85rem"><code><% tag['created_by'] %></code></td>
       <td><span class="badge badge-purple"><% tag['uses'] or 0 %></span></td>
       <td>
         <div style="display:flex;gap:.4rem">
           <button class="btn btn-ghost" style="padding:.2rem .5rem;font-size:.75rem"
             onclick="editTag(<% tag['id'] %>, '<% tag['content']|replace("'", "\\'") %>')">
-            &#9998; Edit
+            ✏️ Edit
           </button>
           <form method="POST" action="/commands/delete/<% tag['id'] %>" style="margin:0"
                 onsubmit="return confirm('Delete tag?')">
-            <button type="submit" class="btn btn-danger" style="padding:.2rem .55rem;font-size:.75rem">&#128465;</button>
+            <button type="submit" class="btn btn-danger" style="padding:.2rem .55rem;font-size:.75rem">🗑️</button>
           </form>
         </div>
       </td>
@@ -54,12 +113,16 @@
 
 <!-- Edit modal -->
 <div id="editModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999;align-items:center;justify-content:center">
-  <div style="background:var(--surface1);border-radius:10px;padding:1.5rem;width:min(480px,90vw)">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1.5rem;width:min(480px,90vw)">
     <h3 style="margin:0 0 1rem">Edit Tag</h3>
+    <div id="previewSection" style="margin-bottom: 1rem; padding: 1rem; background: var(--surface); border-radius: 8px; display: none;">
+      <div style="font-size: 0.75rem; color: var(--muted); margin-bottom: 0.5rem;">Preview:</div>
+      <div id="contentPreview" style="color: var(--text); font-size: 0.9rem;"></div>
+    </div>
     <form id="editForm" method="POST">
       <div class="form-group">
         <label class="form-label">New Content</label>
-        <textarea id="editContent" name="content" class="form-control" rows="4" required style="resize:vertical"></textarea>
+        <textarea id="editContent" name="content" class="form-control" rows="4" required style="resize:vertical" onkeyup="updatePreview()"></textarea>
       </div>
       <div style="display:flex;gap:.75rem;justify-content:flex-end;margin-top:.75rem">
         <button type="button" class="btn btn-ghost" onclick="closeEdit()">Cancel</button>
@@ -70,17 +133,90 @@
 </div>
 
 <script>
+function toggleFilters() {
+  const panel = document.getElementById('filterPanel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleSelectAll() {
+  const checkboxes = document.querySelectorAll('.tag-checkbox');
+  const selectAll = document.getElementById('selectAll') || document.getElementById('headerCheckbox');
+  checkboxes.forEach(cb => cb.checked = selectAll.checked);
+  updateBulkUI();
+}
+
+function updateBulkUI() {
+  const checkboxes = document.querySelectorAll('.tag-checkbox:checked');
+  const bulkActions = document.getElementById('bulkActions');
+  const selectedCount = document.getElementById('selectedCount');
+  
+  if (checkboxes.length > 0) {
+    bulkActions.style.display = 'block';
+    selectedCount.textContent = `${checkboxes.length} tag(s) selected`;
+    
+    // Add checkboxes to forms
+    const bulkDeleteForm = document.getElementById('bulkDeleteForm');
+    bulkDeleteForm.innerHTML = '';
+    checkboxes.forEach(cb => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'tag_ids[]';
+      input.value = cb.value;
+      bulkDeleteForm.appendChild(input);
+    });
+    
+    const bulkResetForm = document.getElementById('bulkResetForm');
+    bulkResetForm.innerHTML = '';
+    checkboxes.forEach(cb => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'tag_ids[]';
+      input.value = cb.value;
+      bulkResetForm.appendChild(input);
+    });
+    
+    bulkDeleteForm.innerHTML += '<button type="submit" class="btn btn-danger" style="font-size: 0.85rem;" onclick="return confirm(\'Delete selected tags?\')">Delete Selected</button>';
+    bulkResetForm.innerHTML += '<button type="submit" class="btn btn-warning" style="font-size: 0.85rem;">Reset Uses</button>';
+  } else {
+    bulkActions.style.display = 'none';
+  }
+}
+
+function applyFilters() {
+  const query = document.getElementById('searchQuery').value;
+  const sortBy = document.getElementById('sortBy').value;
+  // In a real implementation, this would fetch from /commands/search API
+  console.log('Filters applied:', { query, sortBy });
+}
+
+function resetFilters() {
+  document.getElementById('searchQuery').value = '';
+  document.getElementById('sortBy').value = 'name';
+}
+
 function editTag(id, content) {
   document.getElementById('editForm').action = '/commands/edit/' + id;
   document.getElementById('editContent').value = content;
+  document.getElementById('previewSection').style.display = 'block';
+  updatePreview();
   const m = document.getElementById('editModal');
   m.style.display = 'flex';
 }
+
+function updatePreview() {
+  const content = document.getElementById('editContent').value;
+  document.getElementById('contentPreview').textContent = content || '(empty)';
+}
+
 function closeEdit() {
   document.getElementById('editModal').style.display = 'none';
 }
+
 document.getElementById('editModal').addEventListener('click', function(e) {
   if (e.target === this) closeEdit();
 });
+
+// Initialize
+updateBulkUI();
 </script>
 {% endblock %}

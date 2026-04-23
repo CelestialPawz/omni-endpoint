@@ -468,6 +468,66 @@ def delete_command(tag_id):
     flash('Tag deleted.', 'success')
     return redirect(url_for('commands'))
 
+@app.route('/commands/search')
+@login_required
+def search_commands():
+    """API endpoint for searching and filtering tags."""
+    query = request.args.get('q', '').strip()
+    guild_id = request.args.get('guild', '').strip()
+    created_by = request.args.get('creator', '').strip()
+    sort_by = request.args.get('sort', 'name')
+    limit = min(int(request.args.get('limit', 50)), 100)
+    offset = int(request.args.get('offset', 0))
+    
+    result = db_module.search_tags_sync(query, guild_id, created_by, sort_by, limit, offset)
+    return json.dumps(result)
+
+@app.route('/commands/stats')
+@login_required
+def tag_stats():
+    """API endpoint for tag usage statistics."""
+    stats = db_module.get_tag_usage_stats_sync()
+    return json.dumps(stats)
+
+@app.route('/commands/bulk-delete', methods=['POST'])
+@login_required
+def bulk_delete_tags():
+    """Bulk delete tags by ID list."""
+    tag_ids = request.form.getlist('tag_ids[]')
+    if not tag_ids:
+        flash('No tags selected.', 'warning')
+        return redirect(url_for('commands'))
+    
+    try:
+        conn = get_db()
+        for tag_id in tag_ids:
+            conn.execute('DELETE FROM tags WHERE id=?', (tag_id,))
+        conn.commit()
+        conn.close()
+        flash(f'Deleted {len(tag_ids)} tag(s).', 'success')
+    except Exception as e:
+        flash(f'Error deleting tags: {e}', 'danger')
+    
+    return redirect(url_for('commands'))
+
+@app.route('/commands/reset-uses', methods=['POST'])
+@login_required
+def reset_tag_uses():
+    """Reset uses count for selected tags."""
+    tag_ids = request.form.getlist('tag_ids[]')
+    if not tag_ids:
+        flash('No tags selected.', 'warning')
+        return redirect(url_for('commands'))
+    
+    try:
+        for tag_id in tag_ids:
+            db_module.reset_tag_uses_sync(tag_id)
+        flash(f'Reset uses for {len(tag_ids)} tag(s).', 'success')
+    except Exception as e:
+        flash(f'Error resetting uses: {e}', 'danger')
+    
+    return redirect(url_for('commands'))
+
 # ── AutoMod ─────────────────────────────────────────────────────────────
 
 @app.route('/automod')
