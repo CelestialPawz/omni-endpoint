@@ -145,6 +145,26 @@ _SCHEMA = """
         duration INTEGER,
         FOREIGN KEY (playlist_id) REFERENCES music_playlists(id) ON DELETE CASCADE
     );
+
+    -- Commands table stores known commands for the analytics dashboard
+    CREATE TABLE IF NOT EXISTS commands (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        UNIQUE(guild_id, name)
+    );
+
+    -- command_usage stores per-day usage aggregates (date as TEXT 'YYYY-MM-DD')
+    CREATE TABLE IF NOT EXISTS command_usage (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id TEXT NOT NULL,
+        command_id INTEGER,
+        user_id TEXT,
+        date TEXT NOT NULL,
+        uses INTEGER DEFAULT 1,
+        FOREIGN KEY (command_id) REFERENCES commands(id) ON DELETE SET NULL
+    );
 """
 
 async def init_db():
