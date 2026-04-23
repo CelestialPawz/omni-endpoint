@@ -1,0 +1,434 @@
+{% extends 'base.html' %}
+{% set title = 'User Profile' %}
+{% block content %}
+
+<div class="user-profile-container">
+  <div class="profile-header card">
+    <div class="profile-banner"></div>
+    <div class="profile-info">
+      <div class="profile-avatar">👤</div>
+      <div class="profile-details">
+        <h1><% profile.user_id %></h1>
+        <div class="profile-meta">Member</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats Grid -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon">📊</div>
+      <div class="stat-info">
+        <div class="stat-value"><% profile.stats.level %></div>
+        <div class="stat-label">Level</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">⭐</div>
+      <div class="stat-info">
+        <div class="stat-value"><% "{:,}".format(profile.stats.xp) %></div>
+        <div class="stat-label">XP</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🏆</div>
+      <div class="stat-info">
+        <div class="stat-value"><% profile.stats.get('rank', '—') %><% " / " + str(profile.stats.get('total_users', '?')) if profile.stats.get('total_users') else "" %></div>
+        <div class="stat-label">Rank</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- XP Progress Bar -->
+  <div class="card">
+    <h2>📈 Level Progress</h2>
+    <% set xp = profile.stats.xp %>
+    <% set level = profile.stats.level %>
+    <% set floor = 100 * level * (level + 1) // 2 %>
+    <% set next_level = 100 * (level + 1) * (level + 2) // 2 %>
+    <% set xp_in_level = xp - floor %>
+    <% set xp_needed = next_level - floor %>
+    <% set progress = round((xp_in_level / xp_needed) * 100) if xp_needed > 0 else 100 %>
+    
+    <div class="progress-bar-container">
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: <% progress %>%;"></div>
+      </div>
+      <div class="progress-label">
+        <span><% xp_in_level %> / <% xp_needed %> XP</span>
+        <span class="progress-percent"><% progress %>%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Music Favorites -->
+  <% if profile.favorites %>
+  <div class="card">
+    <h2>🎵 Favorite Tracks (<% profile.favorites|length %>)</h2>
+    <div class="favorites-list">
+      <% for fav in profile.favorites %>
+      <div class="favorite-item">
+        <div class="fav-thumbnail">
+          <% if fav.thumbnail %>
+          <img src="<% fav.thumbnail %>" alt="<% fav.title %>" style="width: 100%; border-radius: 6px;">
+          <% else %>
+          <div style="background: var(--accent); width: 100%; height: 100%; border-radius: 6px; display: flex; align-items: center; justify-content: center;">🎵</div>
+          <% endif %>
+        </div>
+        <div class="fav-info">
+          <div class="fav-title"><% fav.title %></div>
+          <% if fav.uploader %><div class="fav-uploader">by <% fav.uploader %></div><% endif %>
+          <a href="<% fav.url %>" target="_blank" class="fav-link">Open on YouTube →</a>
+        </div>
+      </div>
+      <% endfor %>
+    </div>
+  </div>
+  <% endif %>
+
+  <!-- Playlists -->
+  <% if profile.playlists %>
+  <div class="card">
+    <h2>🎼 Public Playlists (<% profile.playlists|length %>)</h2>
+    <div class="playlists-list">
+      <% for playlist in profile.playlists %>
+      <div class="playlist-item">
+        📁 <strong><% playlist.name %></strong>
+      </div>
+      <% endfor %>
+    </div>
+  </div>
+  <% endif %>
+
+  <!-- Mod Notes (if available) -->
+  <% if profile.notes %>
+  <div class="card">
+    <h2>📝 Mod Notes</h2>
+    <div class="notes-list">
+      <% for note in profile.notes %>
+      <div class="note-item">
+        <div class="note-meta">
+          <span class="note-mod">By: <code><% note.moderator %></code></span>
+          <span class="note-time"><% note.timestamp %></span>
+        </div>
+        <div class="note-content"><% note.note %></div>
+      </div>
+      <% endfor %>
+    </div>
+  </div>
+  <% endif %>
+
+  <!-- Achievements -->
+  <div class="card">
+    <h2>🏅 Achievements</h2>
+    <div class="achievements">
+      <% if profile.stats.level >= 5 %>
+      <div class="achievement">
+        <div class="achievement-icon">⭐</div>
+        <div class="achievement-name">Rising Star</div>
+        <div class="achievement-desc">Reached Level 5</div>
+      </div>
+      <% endif %>
+      
+      <% if profile.stats.level >= 10 %>
+      <div class="achievement">
+        <div class="achievement-icon">🌟</div>
+        <div class="achievement-name">Level 10</div>
+        <div class="achievement-desc">Reached Level 10</div>
+      </div>
+      <% endif %>
+      
+      <% if profile.stats.xp >= 10000 %>
+      <div class="achievement">
+        <div class="achievement-icon">💎</div>
+        <div class="achievement-name">XP Master</div>
+        <div class="achievement-desc">Earned 10,000+ XP</div>
+      </div>
+      <% endif %>
+      
+      <% if profile.favorites|length > 0 %>
+      <div class="achievement">
+        <div class="achievement-icon">🎵</div>
+        <div class="achievement-name">Music Lover</div>
+        <div class="achievement-desc">Added music to favorites</div>
+      </div>
+      <% endif %>
+    </div>
+  </div>
+
+</div>
+
+<style>
+.user-profile-container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.profile-header {
+  position: relative;
+  overflow: hidden;
+  padding: 2rem 1.5rem;
+}
+
+.profile-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 120px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-light));
+  opacity: 0.1;
+}
+
+.profile-info {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5rem;
+}
+
+.profile-avatar {
+  width: 80px;
+  height: 80px;
+  background: var(--surface);
+  border: 3px solid var(--accent);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+}
+
+.profile-details h1 {
+  font-size: 1.8rem;
+  color: var(--accent-light);
+  margin: 0;
+}
+
+.profile-meta {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.stat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.stat-icon {
+  font-size: 2rem;
+}
+
+.stat-info {
+  flex: 1;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent-light);
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.progress-bar-container {
+  margin: 1rem 0;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 24px;
+  background: var(--surface);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-light));
+  transition: width 0.3s;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.progress-percent {
+  color: var(--accent-light);
+  font-weight: 600;
+}
+
+.favorites-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.favorite-item {
+  background: var(--surface);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  transition: all 0.2s;
+}
+
+.favorite-item:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(124, 92, 191, 0.1);
+}
+
+.fav-thumbnail {
+  width: 100%;
+  padding-top: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.fav-thumbnail img {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.fav-info {
+  padding: 0.75rem;
+}
+
+.fav-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fav-uploader {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin: 0.25rem 0;
+}
+
+.fav-link {
+  font-size: 0.7rem;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.playlists-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.playlist-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  color: var(--text);
+}
+
+.notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.note-item {
+  background: var(--surface);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: 1rem;
+}
+
+.note-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.note-content {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.achievements {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.achievement {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.achievement:hover {
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px rgba(124, 92, 191, 0.15);
+}
+
+.achievement-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.achievement-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.achievement-desc {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+
+@media(max-width: 600px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .favorites-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .achievements {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+</style>
+
+{% endblock %}

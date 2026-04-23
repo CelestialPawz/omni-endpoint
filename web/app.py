@@ -528,6 +528,20 @@ def reset_tag_uses():
     
     return redirect(url_for('commands'))
 
+# ── User Profiles ────────────────────────────────────────────────────────
+
+@app.route('/user/<user_id>')
+@login_required
+def user_profile(user_id):
+    """Display user profile with stats and achievements."""
+    try:
+        profile = db_module.get_user_profile_sync(user_id, GUILD_ID)
+        return render_template('user_profile.html', user=session['user'], profile=profile)
+    except Exception as e:
+        print(f"[Profile Error] {e}")
+        flash(f'Error loading profile: {e}', 'danger')
+        return redirect(url_for('leaderboard'))
+
 # ── AutoMod ─────────────────────────────────────────────────────────────
 
 @app.route('/automod')
