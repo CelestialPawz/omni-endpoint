@@ -542,6 +542,58 @@ def user_profile(user_id):
         flash(f'Error loading profile: {e}', 'danger')
         return redirect(url_for('leaderboard'))
 
+# ── Analytics ────────────────────────────────────────────────────────────
+
+@app.route('/analytics')
+@login_required
+def analytics():
+    """Display comprehensive analytics dashboard."""
+    try:
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        # Get analytics data
+        usage_by_date = db_module.get_command_usage_by_date_sync(GUILD_ID, start_date, end_date)
+        top_commands = db_module.get_top_commands_sync(GUILD_ID, 15, start_date, end_date)
+        guild_activity = db_module.get_guild_activity_sync(GUILD_ID, start_date, end_date)
+        member_activity = db_module.get_member_activity_sync(GUILD_ID, 15)
+        
+        return render_template(
+            'analytics.html',
+            user=session['user'],
+            usage_by_date=usage_by_date,
+            top_commands=top_commands,
+            guild_activity=guild_activity,
+            member_activity=member_activity,
+            start_date=start_date,
+            end_date=end_date
+        )
+    except Exception as e:
+        print(f"[Analytics Error] {e}")
+        flash(f'Error loading analytics: {e}', 'danger')
+        return redirect(url_for('dashboard'))
+
+@app.route('/analytics/export')
+@login_required
+def export_analytics():
+    """Export analytics data as CSV."""
+    try:
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        csv_data = db_module.export_analytics_csv_sync(GUILD_ID, start_date, end_date)
+        
+        from flask import Response
+        return Response(
+            csv_data,
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=analytics_export.csv'}
+        )
+    except Exception as e:
+        print(f"[Export Error] {e}")
+        flash(f'Error exporting data: {e}', 'danger')
+        return redirect(url_for('analytics'))
+
 # ── AutoMod ─────────────────────────────────────────────────────────────
 
 @app.route('/automod')
