@@ -1,7 +1,6 @@
 {% extends 'base.html' %}
 {% set title = 'Analytics' %}
 {% block content %}
-
 <div class="analytics-container">
   <h1>📊 Analytics Dashboard</h1>
 
@@ -65,9 +64,9 @@
     <h2>👥 Most Active Members</h2>
     <div class="member-list">
       {% if member_activity %}
-        {% for i, member in enumerate(member_activity, 1) %}
+        {% for member in member_activity %}
         <div class="member-item">
-          <div class="member-rank"><% i %></div>
+          <div class="member-rank"><% loop.index %></div>
           <div class="member-info">
             <a href="<% url_for('user_profile', user_id=member.user_id) %>" class="member-id"><% member.user_id %></a>
             <div class="member-stat"><% "{:,}".format(member.uses) %> commands</div>
@@ -99,9 +98,9 @@
         </tr>
       </thead>
       <tbody>
-        {% for i, cmd in enumerate(top_commands, 1) %}
+        {% for cmd in top_commands %}
         <tr>
-          <td class="rank"><% i %></td>
+          <td class="rank"><% loop.index %></td>
           <td class="cmd-name"><% cmd.name %></td>
           <td class="uses"><% "{:,}".format(cmd.uses) %></td>
           <td class="days"><% cmd.days_used %></td>
@@ -111,6 +110,7 @@
       </tbody>
     </table>
   </div>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
@@ -121,7 +121,6 @@ if (usageCtx) {
   const usageData = JSON.parse('<% usage_by_date | tojson | safe %>');
   const labels = usageData.map(d => d.date);
   const data = usageData.map(d => d.uses);
-
   new Chart(usageCtx, {
     type: 'line',
     data: {
@@ -170,7 +169,6 @@ if (topCtx) {
   const topData = JSON.parse('<% top_commands | tojson | safe %>');
   const labels = topData.map(c => c.name);
   const data = topData.map(c => c.uses);
-
   new Chart(topCtx, {
     type: 'bar',
     data: {
@@ -215,18 +213,15 @@ if (topCtx) {
   max-width: 1200px;
   margin: 0 auto;
 }
-
 .filter-card {
   margin-bottom: 1.5rem;
 }
-
 .date-filter {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
   align-items: center;
 }
-
 .filter-group {
   display: flex;
   gap: 0.75rem;
@@ -234,7 +229,6 @@ if (topCtx) {
   align-items: center;
   width: 100%;
 }
-
 .filter-input {
   padding: 0.6rem 0.8rem;
   background: var(--surface);
@@ -243,7 +237,6 @@ if (topCtx) {
   color: var(--text);
   font-size: 0.9rem;
 }
-
 .btn {
   padding: 0.6rem 1.2rem;
   border: none;
@@ -254,44 +247,36 @@ if (topCtx) {
   display: inline-block;
   transition: all 0.2s;
 }
-
 .btn-primary {
   background: var(--accent);
   color: white;
 }
-
 .btn-primary:hover {
   background: #6b4fa0;
   transform: translateY(-2px);
 }
-
 .btn-secondary {
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
 }
-
 .btn-secondary:hover {
   background: var(--card);
 }
-
 .btn-success {
   background: #00a86b;
   color: white;
 }
-
 .btn-success:hover {
   background: #008c56;
   transform: translateY(-2px);
 }
-
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 1rem;
   margin: 1.5rem 0;
 }
-
 .stat-card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -301,49 +286,40 @@ if (topCtx) {
   align-items: center;
   gap: 1rem;
 }
-
 .stat-icon {
   font-size: 2rem;
 }
-
 .stat-info {
   flex: 1;
 }
-
 .stat-value {
   font-size: 1.5rem;
   font-weight: 700;
   color: var(--accent-light);
 }
-
 .stat-label {
   font-size: 0.8rem;
   color: var(--muted);
 }
-
 .chart-card {
   margin: 1.5rem 0;
 }
-
 .chart-container {
   position: relative;
   height: 400px;
   margin-top: 1rem;
 }
-
 .usage-chart,
 .top-commands-chart {
   width: 100% !important;
   height: 100% !important;
 }
-
 .member-list {
   display: flex;
   flex-direction: column;
   gap: 1rem;
   margin-top: 1rem;
 }
-
 .member-item {
   display: flex;
   align-items: center;
@@ -353,7 +329,6 @@ if (topCtx) {
   padding: 1rem;
   border: 1px solid var(--border);
 }
-
 .member-rank {
   font-weight: 700;
   font-size: 1.2rem;
@@ -361,11 +336,9 @@ if (topCtx) {
   min-width: 30px;
   text-align: center;
 }
-
 .member-info {
   flex: 1;
 }
-
 .member-id {
   color: var(--accent-light);
   text-decoration: none;
@@ -373,16 +346,13 @@ if (topCtx) {
   display: block;
   margin-bottom: 0.25rem;
 }
-
 .member-id:hover {
   text-decoration: underline;
 }
-
 .member-stat {
   font-size: 0.85rem;
   color: var(--muted);
 }
-
 .member-bar {
   width: 80px;
   height: 24px;
@@ -391,24 +361,20 @@ if (topCtx) {
   overflow: hidden;
   border: 1px solid var(--border);
 }
-
 .bar-fill {
   height: 100%;
   background: linear-gradient(90deg, var(--accent), var(--accent-light));
   transition: width 0.3s;
 }
-
 .commands-table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 1rem;
 }
-
 .commands-table thead {
   background: var(--surface);
   border-bottom: 2px solid var(--border);
 }
-
 .commands-table th {
   padding: 1rem;
   text-align: left;
@@ -416,83 +382,66 @@ if (topCtx) {
   font-weight: 600;
   font-size: 0.9rem;
 }
-
 .commands-table td {
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--border);
   color: var(--text);
 }
-
 .commands-table tbody tr:hover {
   background: var(--surface);
 }
-
 .commands-table .rank {
   font-weight: 600;
   color: var(--accent);
   width: 50px;
 }
-
 .commands-table .cmd-name {
   font-weight: 500;
 }
-
 .commands-table .uses {
   text-align: right;
   font-weight: 600;
   color: var(--accent-light);
 }
-
 .commands-table .days {
   text-align: center;
 }
-
 .commands-table .avg {
   text-align: right;
   color: var(--muted);
 }
-
 .no-data {
   text-align: center;
   color: var(--muted);
   padding: 2rem;
 }
-
-@media(max-width: 768px) {
+@media (max-width: 768px) {
   .filter-group {
     flex-direction: column;
   }
-
   .filter-input,
   .btn {
     width: 100%;
   }
-
   .stats-grid {
     grid-template-columns: 1fr;
   }
-
   .chart-container {
     height: 300px;
   }
-
   .member-item {
     flex-wrap: wrap;
   }
-
   .member-bar {
     width: 100%;
   }
-
   .commands-table {
     font-size: 0.85rem;
   }
-
   .commands-table th,
   .commands-table td {
     padding: 0.5rem;
   }
 }
 </style>
-
 {% endblock %}

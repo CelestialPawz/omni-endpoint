@@ -146,7 +146,7 @@ _SCHEMA = """
         FOREIGN KEY (playlist_id) REFERENCES music_playlists(id) ON DELETE CASCADE
     );
 
-    -- Commands table stores known commands for the analytics dashboard
+    -- commands: stores known slash/tag commands for the analytics dashboard
     CREATE TABLE IF NOT EXISTS commands (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         guild_id TEXT NOT NULL,
@@ -155,7 +155,7 @@ _SCHEMA = """
         UNIQUE(guild_id, name)
     );
 
-    -- command_usage stores per-day usage aggregates (date as TEXT 'YYYY-MM-DD')
+    -- command_usage: per-day usage aggregates (date stored as TEXT 'YYYY-MM-DD')
     CREATE TABLE IF NOT EXISTS command_usage (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         guild_id TEXT NOT NULL,
@@ -167,8 +167,12 @@ _SCHEMA = """
     );
 """
 
+
 async def init_db():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    """Async DB init for the bot."""
+    db_dir = os.path.dirname(DB_PATH)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as db:
         await db.executescript(_SCHEMA)
         for stmt in [
@@ -180,9 +184,12 @@ async def init_db():
                 pass
         await db.commit()
 
+
 def init_db_sync():
-    """Synchronous DB init for Flask web panel."""
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    """Synchronous DB init for the Flask web panel."""
+    db_dir = os.path.dirname(DB_PATH)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.executescript(_SCHEMA)
     for stmt in [
@@ -195,7 +202,9 @@ def init_db_sync():
     conn.commit()
     conn.close()
 
+
 async def get_setting(guild_id: str, key: str, default=None):
+    """Read a single column from guild_settings for the given guild."""
     async with aiosqlite.connect(DB_PATH) as db:
         try:
             async with db.execute(f"SELECT {key} FROM guild_settings WHERE guild_id = ?", (guild_id,)) as cur:
@@ -204,7 +213,9 @@ async def get_setting(guild_id: str, key: str, default=None):
         except Exception:
             return default
 
+
 async def set_setting(guild_id: str, key: str, value):
+    """Upsert a single column in guild_settings for the given guild."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             f"INSERT INTO guild_settings (guild_id, {key}) VALUES (?, ?) "
@@ -213,7 +224,9 @@ async def set_setting(guild_id: str, key: str, value):
         )
         await db.commit()
 
+
 async def add_mod_log(guild_id: str, action: str, moderator_id: str, target_id: str = None, reason: str = None):
+    """Append a moderation action to mod_logs."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "INSERT INTO mod_logs (guild_id, action, moderator_id, target_id, reason) VALUES (?, ?, ?, ?, ?)",
@@ -221,10 +234,11 @@ async def add_mod_log(guild_id: str, action: str, moderator_id: str, target_id: 
         )
         await db.commit()
 
-# ── Music Functions ──────────────────────────────────────────────────────
+
+# -- Music Functions ----------------------------------------------------------
 
 async def save_queue(guild_id: str, queue_list: list):
-    """Save queue to database. Format: [(title, url, duration), ...]"""
+    """Persist the current queue to the database. Format: [(title, url, duration), ...]"""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("DELETE FROM music_queue WHERE guild_id = ?", (guild_id,))
         for pos, (title, url, duration) in enumerate(queue_list):
@@ -234,8 +248,9 @@ async def save_queue(guild_id: str, queue_list: list):
             )
         await db.commit()
 
+
 async def load_queue(guild_id: str) -> list:
-    """Load queue from database. Returns: [(title, url, duration), ...]"""
+    """Load the persisted queue. Returns: [(title, url, duration), ...]"""
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute(
             "SELECT track_title, track_url, duration FROM music_queue WHERE guild_id = ? ORDER BY position",
@@ -244,8 +259,9 @@ async def load_queue(guild_id: str) -> list:
             rows = await cur.fetchall()
             return [(row[0], row[1], row[2]) for row in rows]
 
+
 async def add_to_history(guild_id: str, title: str, url: str, duration: int, user_id: str):
-    """Log a played track to history."""
+    """Log a played track to music_history."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "INSERT INTO music_history (guild_id, track_title, track_url, duration, played_by) VALUES (?, ?, ?, ?, ?)",
@@ -253,8 +269,9 @@ async def add_to_history(guild_id: str, title: str, url: str, duration: int, use
         )
         await db.commit()
 
+
 async def add_favorite(user_id: str, title: str, url: str, uploader: str = None, thumbnail: str = None):
-    """Add track to user favorites."""
+    """Add a track to a user's favorites. Silently ignores duplicates."""
     async with aiosqlite.connect(DB_PATH) as db:
         try:
             await db.execute(
@@ -265,8 +282,9 @@ async def add_favorite(user_id: str, title: str, url: str, uploader: str = None,
             pass
         await db.commit()
 
+
 async def get_favorites(user_id: str, limit: int = 50) -> list:
-    """Get user's favorite tracks."""
+    """Get a user's favorite tracks, most recently added first."""
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute(
             "SELECT track_title, track_url, uploader, thumbnail FROM music_favorites WHERE user_id = ? ORDER BY added_at DESC LIMIT ?",
@@ -274,8 +292,9 @@ async def get_favorites(user_id: str, limit: int = 50) -> list:
         ) as cur:
             return await cur.fetchall()
 
+
 async def create_playlist(user_id: str, name: str, is_public: bool = False) -> int:
-    """Create a playlist, return playlist ID."""
+    """Create a new playlist and return its ID."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "INSERT INTO music_playlists (user_id, name, is_public) VALUES (?, ?, ?)",
@@ -285,8 +304,9 @@ async def create_playlist(user_id: str, name: str, is_public: bool = False) -> i
         async with db.execute("SELECT last_insert_rowid()") as cur:
             return (await cur.fetchone())[0]
 
+
 async def add_to_playlist(playlist_id: int, title: str, url: str, duration: int):
-    """Add track to playlist."""
+    """Append a track to an existing playlist."""
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute(
             "SELECT MAX(position) FROM music_playlist_tracks WHERE playlist_id = ?",
@@ -300,8 +320,9 @@ async def add_to_playlist(playlist_id: int, title: str, url: str, duration: int)
         )
         await db.commit()
 
+
 async def get_playlist(playlist_id: int) -> list:
-    """Get playlist tracks."""
+    """Get all tracks in a playlist, ordered by position."""
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute(
             "SELECT track_title, track_url, duration FROM music_playlist_tracks WHERE playlist_id = ? ORDER BY position",
@@ -309,76 +330,76 @@ async def get_playlist(playlist_id: int) -> list:
         ) as cur:
             return await cur.fetchall()
 
-# ── Dashboard Stats Functions ────────────────────────────────────────────
+
+# -- Dashboard Stats Functions ------------------------------------------------
 
 def get_total_tags_sync() -> int:
-    """Get total count of tags (synchronous for Flask)."""
+    """Get the total number of tags across all guilds."""
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute("SELECT COUNT(*) FROM tags")
     count = cur.fetchone()[0]
     conn.close()
     return count
 
+
 def get_tags_by_guild_sync() -> dict:
-    """Get tag count per guild (synchronous)."""
+    """Get tag count per guild, sorted by count descending."""
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute("SELECT guild_id, COUNT(*) as count FROM tags GROUP BY guild_id ORDER BY count DESC")
     result = {row[0]: row[1] for row in cur.fetchall()}
     conn.close()
     return result
 
+
 def get_total_guilds_sync() -> int:
-    """Get count of unique guilds with tags (synchronous)."""
+    """Get the number of unique guilds that have at least one tag."""
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute("SELECT COUNT(DISTINCT guild_id) FROM tags")
     count = cur.fetchone()[0]
     conn.close()
     return count
 
+
 def get_tag_stats_sync() -> dict:
-    """Get aggregated tag statistics (synchronous)."""
+    """Get aggregated tag statistics: total uses, top 5 tags, average uses."""
     conn = sqlite3.connect(DB_PATH)
     stats = {}
-    
-    # Total uses
+
     cur = conn.execute("SELECT COALESCE(SUM(uses), 0) FROM tags")
     stats['total_uses'] = cur.fetchone()[0]
-    
-    # Most used tags
+
     cur = conn.execute("SELECT name, uses FROM tags ORDER BY uses DESC LIMIT 5")
     stats['top_tags'] = [{'name': row[0], 'uses': row[1]} for row in cur.fetchall()]
-    
-    # Average uses per tag
+
     cur = conn.execute("SELECT AVG(uses) FROM tags")
     avg = cur.fetchone()[0]
     stats['avg_uses'] = round(avg, 2) if avg else 0
-    
+
     conn.close()
     return stats
 
+
 def get_active_levels_sync() -> dict:
-    """Get level distribution statistics (synchronous)."""
+    """Get level distribution stats: total active users, average level, top level buckets."""
     conn = sqlite3.connect(DB_PATH)
     stats = {}
-    
-    # Total users with levels
+
     cur = conn.execute("SELECT COUNT(DISTINCT user_id) FROM levels WHERE xp > 0")
     stats['total_users'] = cur.fetchone()[0]
-    
-    # Average level
+
     cur = conn.execute("SELECT AVG(level) FROM levels WHERE level > 0")
     avg_level = cur.fetchone()[0]
     stats['avg_level'] = round(avg_level, 2) if avg_level else 0
-    
-    # Top levels
+
     cur = conn.execute("SELECT level, COUNT(*) as count FROM levels WHERE level > 0 GROUP BY level ORDER BY level DESC LIMIT 5")
     stats['top_levels'] = [{'level': row[0], 'users': row[1]} for row in cur.fetchall()]
-    
+
     conn.close()
     return stats
 
+
 def get_recent_mod_logs_sync(limit: int = 10) -> list:
-    """Get recent moderation logs (synchronous)."""
+    """Get the most recent moderation log entries."""
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute(
         "SELECT action, moderator_id, target_id, reason, timestamp FROM mod_logs ORDER BY timestamp DESC LIMIT ?",
@@ -391,33 +412,38 @@ def get_recent_mod_logs_sync(limit: int = 10) -> list:
     conn.close()
     return logs
 
+
 def get_guild_count_sync() -> int:
-    """Get count of distinct guilds in the bot database (synchronous)."""
+    """Get the number of guilds with a row in guild_settings."""
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute("SELECT COUNT(DISTINCT guild_id) FROM guild_settings")
     count = cur.fetchone()[0]
     conn.close()
     return count
 
-def get_command_usage_by_date_sync(days: int = 7) -> list:
-    """Get command usage count by date for last N days (synchronous)."""
+
+def get_usage_trend_sync(days: int = 7) -> list:
+    """Get mod_log action counts grouped by date for the last N days.
+    Returns: [{'date': 'YYYY-MM-DD', 'count': int}, ...]
+    """
     conn = sqlite3.connect(DB_PATH)
     cur = conn.execute(
         """
-        SELECT DATE(timestamp) as date, COUNT(*) as count 
-        FROM mod_logs 
-        WHERE timestamp >= datetime('now', '-' || ? || ' days')
+        SELECT DATE(timestamp) as date, COUNT(*) as count
+        FROM mod_logs
+        WHERE timestamp >= datetime('now', ?)
         GROUP BY DATE(timestamp)
         ORDER BY date ASC
         """,
-        (days,)
+        (f"-{days} days",)
     )
     result = [{'date': row[0], 'count': row[1]} for row in cur.fetchall()]
     conn.close()
     return result
 
+
 def get_dashboard_stats_sync() -> dict:
-    """Get all dashboard statistics in one call (synchronous)."""
+    """Collect all dashboard statistics in a single call."""
     return {
         'total_tags': get_total_tags_sync(),
         'total_guilds': get_total_guilds_sync(),
@@ -425,101 +451,96 @@ def get_dashboard_stats_sync() -> dict:
         'tag_stats': get_tag_stats_sync(),
         'level_stats': get_active_levels_sync(),
         'recent_logs': get_recent_mod_logs_sync(5),
-        'usage_trend': get_command_usage_by_date_sync(7),
+        'usage_trend': get_usage_trend_sync(7),
     }
 
-# ── Tag Search & Management Functions ─────────────────────────────────
 
-def search_tags_sync(query: str = None, guild_id: str = None, created_by: str = None, 
+# -- Tag Search & Management Functions ----------------------------------------
+
+def search_tags_sync(query: str = None, guild_id: str = None, created_by: str = None,
                      sort_by: str = 'name', limit: int = 50, offset: int = 0) -> dict:
-    """Search and filter tags with pagination (synchronous)."""
+    """Search and filter tags with pagination.
+    Returns: {'total': int, 'tags': list, 'limit': int, 'offset': int}
+    """
     conn = sqlite3.connect(DB_PATH)
-    
+
     sql = "SELECT id, guild_id, name, content, created_by, uses FROM tags WHERE 1=1"
     params = []
-    
+
     if query:
         sql += " AND name LIKE ?"
         params.append(f"%{query}%")
-    
     if guild_id:
         sql += " AND guild_id = ?"
         params.append(guild_id)
-    
     if created_by:
         sql += " AND created_by = ?"
         params.append(created_by)
-    
-    # Count total results before limit
-    count_sql = f"SELECT COUNT(*) FROM tags WHERE 1=1"
+
+    # Count total matching rows before applying LIMIT
+    count_sql = "SELECT COUNT(*) FROM tags WHERE 1=1"
     if query:
         count_sql += " AND name LIKE ?"
     if guild_id:
         count_sql += " AND guild_id = ?"
     if created_by:
         count_sql += " AND created_by = ?"
-    
+
     total = conn.execute(count_sql, params).fetchone()[0]
-    
-    # Apply sorting
+
     if sort_by == 'usage':
         sql += " ORDER BY uses DESC"
     elif sort_by == 'date':
         sql += " ORDER BY rowid DESC"
     else:
         sql += " ORDER BY name ASC"
-    
+
     sql += " LIMIT ? OFFSET ?"
-    
+
     cur = conn.execute(sql, params + [limit, offset])
     tags = [
-        {'id': row[0], 'guild_id': row[1], 'name': row[2], 'content': row[3], 
+        {'id': row[0], 'guild_id': row[1], 'name': row[2], 'content': row[3],
          'created_by': row[4], 'uses': row[5]}
         for row in cur.fetchall()
     ]
-    
+
     conn.close()
     return {'total': total, 'tags': tags, 'limit': limit, 'offset': offset}
 
+
 def get_tag_usage_stats_sync() -> dict:
-    """Get comprehensive tag usage statistics (synchronous)."""
+    """Get comprehensive tag usage statistics for the tags management page."""
     conn = sqlite3.connect(DB_PATH)
     stats = {}
-    
-    # Total tags
+
     cur = conn.execute("SELECT COUNT(*) FROM tags")
     stats['total_tags'] = cur.fetchone()[0]
-    
-    # Most used tags (top 10)
+
     cur = conn.execute("SELECT name, uses, guild_id FROM tags ORDER BY uses DESC LIMIT 10")
     stats['top_tags'] = [{'name': row[0], 'uses': row[1], 'guild': row[2]} for row in cur.fetchall()]
-    
-    # Least used tags (excluding 0 uses)
+
     cur = conn.execute("SELECT name, uses, guild_id FROM tags WHERE uses > 0 ORDER BY uses ASC LIMIT 10")
     stats['least_used'] = [{'name': row[0], 'uses': row[1], 'guild': row[2]} for row in cur.fetchall()]
-    
-    # Unused tags
+
     cur = conn.execute("SELECT COUNT(*) FROM tags WHERE uses = 0")
     stats['unused_count'] = cur.fetchone()[0]
-    
-    # Average uses
+
     cur = conn.execute("SELECT AVG(uses) FROM tags")
     avg = cur.fetchone()[0]
     stats['avg_uses'] = round(avg, 2) if avg else 0
-    
-    # Total uses across all tags
+
     cur = conn.execute("SELECT SUM(uses) FROM tags")
     stats['total_uses'] = cur.fetchone()[0] or 0
-    
-    # Tags by guild (top 5)
+
     cur = conn.execute("SELECT guild_id, COUNT(*) as count FROM tags GROUP BY guild_id ORDER BY count DESC LIMIT 5")
     stats['top_guilds'] = [{'guild': row[0], 'count': row[1]} for row in cur.fetchall()]
-    
+
     conn.close()
     return stats
 
+
 def reset_tag_uses_sync(tag_id: int) -> bool:
-    """Reset uses count for a single tag."""
+    """Reset the uses counter to 0 for a single tag. Returns True on success."""
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.execute("UPDATE tags SET uses = 0 WHERE id = ?", (tag_id,))
@@ -529,27 +550,31 @@ def reset_tag_uses_sync(tag_id: int) -> bool:
     except Exception:
         return False
 
+
 def reset_old_tag_uses_sync(days: int = 30) -> int:
-    """Reset uses for tags not used in N days. Returns count of tags reset."""
+    """Reset uses for unused tags (uses = 0). Returns count of rows affected.
+    Note: full last-used tracking would require a last_used_at timestamp column.
+    """
     try:
         conn = sqlite3.connect(DB_PATH)
-        # Get tags where last use was more than N days ago (rough estimate based on usage count)
-        # This is a simplified version - in production, you'd want to track last_used timestamp
-        cur = conn.execute("SELECT id FROM tags WHERE uses = 0 LIMIT 100")
-        count = cur.rowcount
+        rows = conn.execute("SELECT id FROM tags WHERE uses = 0 LIMIT 100").fetchall()
+        count = len(rows)
         conn.close()
         return count
     except Exception:
         return 0
 
-# ── User Profile Functions ────────────────────────────────────────────────
+
+# -- User Profile Functions ---------------------------------------------------
 
 def get_user_profile_sync(user_id: str, guild_id: str = None) -> dict:
-    """Get comprehensive user profile data (synchronous)."""
+    """Get a comprehensive user profile: XP/level, rank, favorites, notes, playlists.
+    If guild_id is provided, stats are scoped to that guild.
+    """
     conn = sqlite3.connect(DB_PATH)
     profile = {'user_id': user_id, 'stats': {}, 'favorites': [], 'notes': []}
-    
-    # Get level data
+
+    # Level data - guild-scoped or global aggregate
     if guild_id:
         cur = conn.execute(
             "SELECT xp, level FROM levels WHERE user_id = ? AND guild_id = ?",
@@ -557,7 +582,7 @@ def get_user_profile_sync(user_id: str, guild_id: str = None) -> dict:
         )
     else:
         cur = conn.execute("SELECT SUM(xp) as xp, MAX(level) as level FROM levels WHERE user_id = ?", (user_id,))
-    
+
     level_data = cur.fetchone()
     if level_data:
         profile['stats']['xp'] = level_data[0] or 0
@@ -565,21 +590,19 @@ def get_user_profile_sync(user_id: str, guild_id: str = None) -> dict:
     else:
         profile['stats']['xp'] = 0
         profile['stats']['level'] = 0
-    
-    # Get rank (count users with higher XP in same guild)
+
+    # Rank and total users (guild-scoped only)
     if guild_id:
         cur = conn.execute(
             "SELECT COUNT(*) FROM levels WHERE guild_id = ? AND xp > ?",
             (guild_id, profile['stats']['xp'])
         )
         profile['stats']['rank'] = cur.fetchone()[0] + 1
-    
-    # Get total users in guild
-    if guild_id:
+
         cur = conn.execute("SELECT COUNT(DISTINCT user_id) FROM levels WHERE guild_id = ?", (guild_id,))
         profile['stats']['total_users'] = cur.fetchone()[0]
-    
-    # Get music favorites
+
+    # Music favorites (most recent 5)
     cur = conn.execute(
         "SELECT track_title, track_url, uploader, thumbnail FROM music_favorites WHERE user_id = ? ORDER BY added_at DESC LIMIT 5",
         (user_id,)
@@ -588,8 +611,8 @@ def get_user_profile_sync(user_id: str, guild_id: str = None) -> dict:
         {'title': row[0], 'url': row[1], 'uploader': row[2], 'thumbnail': row[3]}
         for row in cur.fetchall()
     ]
-    
-    # Get mod notes (if accessible)
+
+    # Mod notes (guild-scoped, most recent 5)
     if guild_id:
         cur = conn.execute(
             "SELECT note, moderator_id, timestamp FROM mod_notes WHERE user_id = ? AND guild_id = ? ORDER BY timestamp DESC LIMIT 5",
@@ -599,117 +622,115 @@ def get_user_profile_sync(user_id: str, guild_id: str = None) -> dict:
             {'note': row[0], 'moderator': row[1], 'timestamp': row[2]}
             for row in cur.fetchall()
         ]
-    
-    # Get playlists
+
+    # Public playlists (most recent 3)
     cur = conn.execute(
         "SELECT id, name FROM music_playlists WHERE user_id = ? AND is_public = 1 ORDER BY created_at DESC LIMIT 3",
         (user_id,)
     )
     profile['playlists'] = [{'id': row[0], 'name': row[1]} for row in cur.fetchall()]
-    
+
     conn.close()
     return profile
 
+
 def get_user_rank_sync(user_id: str, guild_id: str) -> tuple:
-    """Get user's rank in a guild. Returns (rank, total_users)."""
+    """Get a user's rank within a guild. Returns (rank, total_users)."""
     conn = sqlite3.connect(DB_PATH)
-    
-    # Get user's XP
+
     cur = conn.execute("SELECT xp FROM levels WHERE user_id = ? AND guild_id = ?", (user_id, guild_id))
     user_data = cur.fetchone()
     user_xp = user_data[0] if user_data else 0
-    
-    # Get rank
+
     cur = conn.execute(
         "SELECT COUNT(*) FROM levels WHERE guild_id = ? AND xp > ?",
         (guild_id, user_xp)
     )
     rank = cur.fetchone()[0] + 1
-    
-    # Get total users
+
     cur = conn.execute("SELECT COUNT(*) FROM levels WHERE guild_id = ?", (guild_id,))
     total = cur.fetchone()[0]
-    
+
     conn.close()
     return rank, total
 
-# ── Analytics Functions ──────────────────────────────────────────────────
+
+# -- Analytics Functions ------------------------------------------------------
 
 def get_command_usage_by_date_sync(guild_id: str, start_date: str = None, end_date: str = None) -> list:
-    """Get tag usage aggregated by date from mod_logs (synchronous)."""
+    """Get tag usage counts grouped by date from mod_logs (action = 'tag_used').
+    Returns: [{'date': 'YYYY-MM-DD', 'uses': int}, ...]
+    """
     conn = sqlite3.connect(DB_PATH)
-    
+
     where_clause = "WHERE guild_id = ? AND action = 'tag_used'"
     params = [guild_id]
-    
+
     if start_date:
         where_clause += " AND DATE(timestamp) >= ?"
         params.append(start_date)
     if end_date:
         where_clause += " AND DATE(timestamp) <= ?"
         params.append(end_date)
-    
+
     cur = conn.execute(f"""
         SELECT DATE(timestamp) as date, COUNT(*) as total_uses FROM mod_logs
         {where_clause}
         GROUP BY DATE(timestamp) ORDER BY date ASC
     """, params)
-    
+
     result = [{'date': row[0], 'uses': row[1]} for row in cur.fetchall()]
     conn.close()
     return result
 
+
 def get_top_commands_sync(guild_id: str, limit: int = 10, start_date: str = None, end_date: str = None) -> list:
-    """Get top tags by usage count from tags table."""
+    """Get the top tags by total use count for a guild.
+    Note: the tags table has no per-date tracking, so date filters are not applied here.
+    Returns: [{'name': str, 'uses': int, 'days_used': int}, ...]
+    """
     conn = sqlite3.connect(DB_PATH)
-    
-    where_clause = "WHERE guild_id = ?"
-    params = [guild_id]
-    
-    # Note: tags table doesn't have per-date info, so date filtering is approximated
-    cur = conn.execute(f"""
+
+    cur = conn.execute("""
         SELECT name, uses as total_uses, 1 as days_used
         FROM tags
-        {where_clause}
+        WHERE guild_id = ?
         ORDER BY total_uses DESC LIMIT ?
-    """, params + [limit])
-    
+    """, (guild_id, limit))
+
     result = [{'name': row[0], 'uses': row[1] or 0, 'days_used': row[2] or 1} for row in cur.fetchall()]
     conn.close()
     return result
 
+
 def get_guild_activity_sync(guild_id: str, start_date: str = None, end_date: str = None) -> dict:
-    """Get overall guild activity stats from tags and mod_logs."""
+    """Get overall guild activity: total tag uses, active users, unique command count.
+    Active users are counted from mod_logs (action = 'tag_used') within the date range.
+    """
     conn = sqlite3.connect(DB_PATH)
-    
-    # Total tag uses
-    cur = conn.execute("""
-        SELECT SUM(uses) FROM tags WHERE guild_id = ?
-    """, (guild_id,))
+
+    # Total tag uses (from tags table - not date-filtered)
+    cur = conn.execute("SELECT SUM(uses) FROM tags WHERE guild_id = ?", (guild_id,))
     total_commands = cur.fetchone()[0] or 0
-    
-    # Active users (from mod_logs for tag_used actions)
+
+    # Active users from mod_logs within the optional date range
     where_clause = "WHERE guild_id = ? AND action = 'tag_used'"
     params = [guild_id]
-    
+
     if start_date:
         where_clause += " AND DATE(timestamp) >= ?"
         params.append(start_date)
     if end_date:
         where_clause += " AND DATE(timestamp) <= ?"
         params.append(end_date)
-    
-    cur = conn.execute(f"""
-        SELECT COUNT(DISTINCT target_id) FROM mod_logs {where_clause}
-    """, params)
+
+    cur = conn.execute(f"SELECT COUNT(DISTINCT target_id) FROM mod_logs {where_clause}", params)
     active_users = cur.fetchone()[0] or 0
-    
-    # Unique tags in guild
-    cur = conn.execute("""
-        SELECT COUNT(*) FROM tags WHERE guild_id = ?
-    """, (guild_id,))
+
+    # Unique tag names in this guild
+    cur = conn.execute("SELECT COUNT(*) FROM tags WHERE guild_id = ?", (guild_id,))
     unique_commands = cur.fetchone()[0] or 0
-    
+
     conn.close()
     return {
         'total_commands': total_commands,
@@ -717,49 +738,47 @@ def get_guild_activity_sync(guild_id: str, start_date: str = None, end_date: str
         'unique_commands': unique_commands
     }
 
+
 def get_member_activity_sync(guild_id: str, limit: int = 15) -> list:
     """Get most active members by tag usage from mod_logs."""
     conn = sqlite3.connect(DB_PATH)
-    
     cur = conn.execute("""
         SELECT target_id, COUNT(*) as total_uses FROM mod_logs
         WHERE guild_id = ? AND action = 'tag_used'
         GROUP BY target_id ORDER BY total_uses DESC LIMIT ?
     """, (guild_id, limit))
-    
     result = [{'user_id': row[0], 'uses': row[1]} for row in cur.fetchall()]
     conn.close()
     return result
 
+
 def export_analytics_csv_sync(guild_id: str, start_date: str = None, end_date: str = None) -> str:
-    """Export tag usage analytics data as CSV string."""
+    """Export tag usage analytics from mod_logs as a CSV string."""
     import csv
     from io import StringIO
-    
+
     conn = sqlite3.connect(DB_PATH)
-    
-    where_clause = "WHERE guild_id = ?"
+
+    where_clause = "WHERE guild_id = ? AND action = 'tag_used'"
     params = [guild_id]
-    
+
     if start_date:
         where_clause += " AND DATE(timestamp) >= ?"
         params.append(start_date)
     if end_date:
         where_clause += " AND DATE(timestamp) <= ?"
         params.append(end_date)
-    
-    # Export mod_logs for tag_used actions
+
     cur = conn.execute(f"""
         SELECT DATE(timestamp) as date, action, target_id, moderator_id, reason FROM mod_logs
-        {where_clause} AND action = 'tag_used' ORDER BY timestamp DESC
+        {where_clause} ORDER BY timestamp DESC
     """, params)
-    
+
     output = StringIO()
     writer = csv.writer(output)
     writer.writerow(['Date', 'Action', 'Tag/Target', 'User', 'Details'])
-    
     for row in cur.fetchall():
         writer.writerow(row)
-    
+
     conn.close()
-    return output.getvalue()
+    return output.getvalue() 
