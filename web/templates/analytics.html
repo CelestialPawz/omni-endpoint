@@ -64,8 +64,8 @@
   <div class="card">
     <h2>👥 Most Active Members</h2>
     <div class="member-list">
-      <% if member_activity %>
-        <% for i, member in enumerate(member_activity, 1) %>
+      {% if member_activity %}
+        {% for i, member in enumerate(member_activity, 1) %}
         <div class="member-item">
           <div class="member-rank"><% i %></div>
           <div class="member-info">
@@ -73,15 +73,15 @@
             <div class="member-stat"><% "{:,}".format(member.uses) %> commands</div>
           </div>
           <div class="member-bar">
-            <% set max_uses = member_activity[0].uses if member_activity else 1 %>
-            <% set percent = (member.uses / max_uses * 100) if max_uses > 0 else 0 %>
+            {% set max_uses = member_activity[0].uses if member_activity else 1 %}
+            {% set percent = (member.uses / max_uses * 100) if max_uses > 0 else 0 %}
             <div class="bar-fill" style="width: <% percent %>%;"></div>
           </div>
         </div>
-        <% endfor %>
-      <% else %>
+        {% endfor %}
+      {% else %}
       <div class="no-data">No activity data available</div>
-      <% endif %>
+      {% endif %}
     </div>
   </div>
 
@@ -99,7 +99,7 @@
         </tr>
       </thead>
       <tbody>
-        <% for i, cmd in enumerate(top_commands, 1) %>
+        {% for i, cmd in enumerate(top_commands, 1) %}
         <tr>
           <td class="rank"><% i %></td>
           <td class="cmd-name"><% cmd.name %></td>
@@ -107,7 +107,7 @@
           <td class="days"><% cmd.days_used %></td>
           <td class="avg"><% "{:.1f}".format(cmd.uses / cmd.days_used) if cmd.days_used > 0 else "—" %></td>
         </tr>
-        <% endfor %>
+        {% endfor %}
       </tbody>
     </table>
   </div>
@@ -118,7 +118,7 @@
 // Usage by Date Chart
 const usageCtx = document.getElementById('usageChart');
 if (usageCtx) {
-  const usageData = <% usage_by_date | tojson %>;
+  const usageData = JSON.parse('<% usage_by_date | tojson | safe %>');
   const labels = usageData.map(d => d.date);
   const data = usageData.map(d => d.uses);
 
@@ -167,7 +167,7 @@ if (usageCtx) {
 // Top Commands Chart
 const topCtx = document.getElementById('topCommandsChart');
 if (topCtx) {
-  const topData = <% top_commands | tojson %>;
+  const topData = JSON.parse('<% top_commands | tojson | safe %>');
   const labels = topData.map(c => c.name);
   const data = topData.map(c => c.uses);
 
