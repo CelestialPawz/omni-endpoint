@@ -616,23 +616,23 @@ def get_user_rank_sync(user_id: str, guild_id: str) -> tuple:
 # ── Analytics Functions ──────────────────────────────────────────────────
 
 def get_command_usage_by_date_sync(guild_id: str, start_date: str = None, end_date: str = None) -> list:
-    """Get command usage aggregated by date (synchronous)."""
+    """Get tag usage aggregated by date from mod_logs (synchronous)."""
     conn = sqlite3.connect(DB_PATH)
     
-    where_clause = "WHERE guild_id = ?"
+    where_clause = "WHERE guild_id = ? AND action = 'tag_used'"
     params = [guild_id]
     
     if start_date:
-        where_clause += " AND date >= ?"
+        where_clause += " AND DATE(timestamp) >= ?"
         params.append(start_date)
     if end_date:
-        where_clause += " AND date <= ?"
+        where_clause += " AND DATE(timestamp) <= ?"
         params.append(end_date)
     
     cur = conn.execute(f"""
-        SELECT date, SUM(uses) as total_uses FROM command_usage
+        SELECT DATE(timestamp) as date, COUNT(*) as total_uses FROM mod_logs
         {where_clause}
-        GROUP BY date ORDER BY date ASC
+        GROUP BY DATE(timestamp) ORDER BY date ASC
     """, params)
     
     result = [{'date': row[0], 'uses': row[1]} for row in cur.fetchall()]
@@ -640,61 +640,54 @@ def get_command_usage_by_date_sync(guild_id: str, start_date: str = None, end_da
     return result
 
 def get_top_commands_sync(guild_id: str, limit: int = 10, start_date: str = None, end_date: str = None) -> list:
-    """Get top commands by usage count."""
-    conn = sqlite3.connect(DB_PATH)
-    
-    where_clause = "WHERE c.guild_id = ?"
-    params = [guild_id]
-    
-    if start_date:
-        where_clause += " AND cu.date >= ?"
-        params.append(start_date)
-    if end_date:
-        where_clause += " AND cu.date <= ?"
-        params.append(end_date)
-    
-    cur = conn.execute(f"""
-        SELECT c.name, SUM(cu.uses) as total_uses, COUNT(DISTINCT cu.date) as days_used
-        FROM commands c
-        LEFT JOIN command_usage cu ON c.id = cu.command_id
-        {where_clause}
-        GROUP BY c.id ORDER BY total_uses DESC LIMIT ?
-    """, params + [limit])
-    
-    result = [{'name': row[0], 'uses': row[1] or 0, 'days_used': row[2] or 0} for row in cur.fetchall()]
-    conn.close()
-    return result
-
-def get_guild_activity_sync(guild_id: str, start_date: str = None, end_date: str = None) -> dict:
-    """Get overall guild activity stats."""
+    """Get top tags by usage count from tags table."""
     conn = sqlite3.connect(DB_PATH)
     
     where_clause = "WHERE guild_id = ?"
     params = [guild_id]
     
-    if start_date:
-        where_clause += " AND date >= ?"
-        params.append(start_date)
-    if end_date:
-        where_clause += " AND date <= ?"
-        params.append(end_date)
-    
-    # Total commands run
+    # Note: tags table doesn't have per-date info, so date filtering is approximated
     cur = conn.execute(f"""
-        SELECT SUM(uses) FROM command_usage {where_clause}
-    """, params)
+        SELECT name, uses as total_uses, 1 as days_used
+        FROM tags
+        {where_clause}
+        ORDER BY total_uses DESC LIMIT ?
+    """, params + [limit])
+    
+    result = [{'name': row[0], 'uses': row[1] or 0, 'days_used': row[2] or 1} for row in cur.fetchall()]
+    conn.close()
+    return result
+
+def get_guild_activity_sync(guild_id: str, start_date: str = None, end_date: str = None) -> dict:
+    """Get overall guild activity stats from tags and mod_logs."""
+    conn = sqlite3.connect(DB_PATH)
+    
+    # Total tag uses
+    cur = conn.execute("""
+        SELECT SUM(uses) FROM tags WHERE guild_id = ?
+    """, (guild_id,))
     total_commands = cur.fetchone()[0] or 0
     
-    # Active users
+    # Active users (from mod_logs for tag_used actions)
+    where_clause = "WHERE guild_id = ? AND action = 'tag_used'"
+    params = [guild_id]
+    
+    if start_date:
+        where_clause += " AND DATE(timestamp) >= ?"
+        params.append(start_date)
+    if end_date:
+        where_clause += " AND DATE(timestamp) <= ?"
+        params.append(end_date)
+    
     cur = conn.execute(f"""
-        SELECT COUNT(DISTINCT user_id) FROM command_usage {where_clause}
+        SELECT COUNT(DISTINCT target_id) FROM mod_logs {where_clause}
     """, params)
     active_users = cur.fetchone()[0] or 0
     
-    # Unique commands used
-    cur = conn.execute(f"""
-        SELECT COUNT(DISTINCT command_id) FROM command_usage {where_clause}
-    """, params)
+    # Unique tags in guild
+    cur = conn.execute("""
+        SELECT COUNT(*) FROM tags WHERE guild_id = ?
+    """, (guild_id,))
     unique_commands = cur.fetchone()[0] or 0
     
     conn.close()
@@ -705,13 +698,13 @@ def get_guild_activity_sync(guild_id: str, start_date: str = None, end_date: str
     }
 
 def get_member_activity_sync(guild_id: str, limit: int = 15) -> list:
-    """Get most active members by command usage."""
+    """Get most active members by tag usage from mod_logs."""
     conn = sqlite3.connect(DB_PATH)
     
     cur = conn.execute("""
-        SELECT user_id, SUM(uses) as total_uses FROM command_usage
-        WHERE guild_id = ?
-        GROUP BY user_id ORDER BY total_uses DESC LIMIT ?
+        SELECT target_id, COUNT(*) as total_uses FROM mod_logs
+        WHERE guild_id = ? AND action = 'tag_used'
+        GROUP BY target_id ORDER BY total_uses DESC LIMIT ?
     """, (guild_id, limit))
     
     result = [{'user_id': row[0], 'uses': row[1]} for row in cur.fetchall()]
@@ -719,7 +712,7 @@ def get_member_activity_sync(guild_id: str, limit: int = 15) -> list:
     return result
 
 def export_analytics_csv_sync(guild_id: str, start_date: str = None, end_date: str = None) -> str:
-    """Export analytics data as CSV string."""
+    """Export tag usage analytics data as CSV string."""
     import csv
     from io import StringIO
     
@@ -729,20 +722,21 @@ def export_analytics_csv_sync(guild_id: str, start_date: str = None, end_date: s
     params = [guild_id]
     
     if start_date:
-        where_clause += " AND date >= ?"
+        where_clause += " AND DATE(timestamp) >= ?"
         params.append(start_date)
     if end_date:
-        where_clause += " AND date <= ?"
+        where_clause += " AND DATE(timestamp) <= ?"
         params.append(end_date)
     
+    # Export mod_logs for tag_used actions
     cur = conn.execute(f"""
-        SELECT date, command_id, user_id, uses FROM command_usage
-        {where_clause} ORDER BY date DESC
+        SELECT DATE(timestamp) as date, action, target_id, moderator_id, reason FROM mod_logs
+        {where_clause} AND action = 'tag_used' ORDER BY timestamp DESC
     """, params)
     
     output = StringIO()
     writer = csv.writer(output)
-    writer.writerow(['Date', 'Command ID', 'User ID', 'Uses'])
+    writer.writerow(['Date', 'Action', 'Tag/Target', 'User', 'Details'])
     
     for row in cur.fetchall():
         writer.writerow(row)
