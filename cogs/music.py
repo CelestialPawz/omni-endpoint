@@ -245,7 +245,8 @@ class Music(commands.Cog):
             if len(gm.queue) > 10:
                 lines.append(f'*...and {len(gm.queue) - 10} more*')
             e.add_field(name='Up next', value='\n'.join(lines), inline=False)
-        e.set_footer(text=f'Loop: {"\u2705" if gm.loop else "\u274c"}')
+        loop_status = "\u2705" if gm.loop else "\u274c"
+        e.set_footer(text=f'Loop: {loop_status}')
         await ctx.send(embed=e)
 
     @commands.command(name='nowplaying', aliases=['np'])
